@@ -44,6 +44,16 @@ composer install   # first time only
 composer test
 ```
 
-GitHub Actions runs the same checks on every push (`.github/workflows/tests.yml`): a syntax check of all PHP files and `public/app.js`, then the PHPUnit tests. Results are on the repository's **Actions** tab.
+### Browser tests
 
-The JavaScript in `public/app.js` (portfolio totals, sorting, charts) is only syntax-checked; it is not covered by automated tests yet.
+The page itself is tested in a real browser with [Playwright](https://playwright.dev/) (`tests/browser/`): prices and sorting, the holdings calculations and totals, the portfolio breakdown, adding, moving and removing stocks, and saving to the data file. The tests start their own copy of the app on port 8095, answer its Yahoo Finance requests with made-up prices, and save to a temporary folder (set through `STOCK_PANEL_DATA_DIR`), so they never touch `data/portfolio.json` or the network. Requires Node.js.
+
+```bash
+npm install                          # first time only
+npx playwright install chromium      # first time only
+npm run test:browser
+```
+
+### On GitHub
+
+GitHub Actions runs everything on every push (`.github/workflows/tests.yml`): a syntax check of all PHP files and `public/app.js`, the PHPUnit tests, and the browser tests. Results are on the repository's **Actions** tab; when a browser test fails, its report is attached to the run.

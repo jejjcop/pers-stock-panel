@@ -87,7 +87,7 @@ $pageData = [
                                     type="text"
                                     placeholder="e.g. TSLA"
                                     maxlength="10"
-                                    pattern="[A-Za-z0-9][A-Za-z0-9.-]{0,9}"
+                                    pattern="[A-Za-z0-9][A-Za-z0-9.\-]{0,9}"
                                     title="Use up to 10 letters, numbers, dots or hyphens."
                                     autocomplete="off"
                                     required

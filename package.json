@@ -1,0 +1,11 @@
+{
+  "name": "pers-stock-panel",
+  "private": true,
+  "description": "Browser tests for Pers Stock Panel",
+  "scripts": {
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0"
+  }
+}

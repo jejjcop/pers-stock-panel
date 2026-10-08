@@ -4,6 +4,13 @@
 # Your stock lists, shares and costs, written by the page as you use it.
 /data/
 
+# Installed by npm; recreate with `npm install`.
+/node_modules/
+
+# Browser test results and reports from Playwright.
+/test-results/
+/playwright-report/
+
 # PHPUnit's cache of previous test results.
 /.phpunit.result.cache
 /.phpunit.cache/

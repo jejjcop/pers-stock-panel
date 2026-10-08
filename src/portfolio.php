@@ -15,7 +15,14 @@ const PORTFOLIO_MAX_STOCKS = 25;
 
 function portfolioPath(): string
 {
-    return dirname(__DIR__) . DIRECTORY_SEPARATOR . 'data' . DIRECTORY_SEPARATOR . 'portfolio.json';
+    // The browser tests point this at a temporary folder so they never touch
+    // the real data file.
+    $directory = getenv('STOCK_PANEL_DATA_DIR');
+    if (!is_string($directory) || $directory === '') {
+        $directory = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'data';
+    }
+
+    return $directory . DIRECTORY_SEPARATOR . 'portfolio.json';
 }
 
 /**
