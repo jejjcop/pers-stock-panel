@@ -1,4 +1,4 @@
-# stock-panel
+# pers-stock-panel
 
 A lightweight PHP web app starter for a stock market dashboard.
 
@@ -21,7 +21,7 @@ Requires PHP 8.2+ with the cURL extension enabled. Yahoo Finance is unofficial a
 ## Run locally
 
 ```bash
-cd stock-panel
+cd pers-stock-panel
 php -S 127.0.0.1:8080 -t public
 ```
 

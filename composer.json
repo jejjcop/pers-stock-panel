@@ -1,5 +1,5 @@
 {
-  "name": "per/stock-panel",
+  "name": "per/pers-stock-panel",
   "description": "A lightweight PHP stock dashboard starter app",
   "autoload": {
     "psr-4": {
