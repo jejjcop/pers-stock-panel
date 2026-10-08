@@ -1,0 +1,6 @@
+# Installed by Composer; recreate with `composer install`.
+/vendor/
+
+# PHPUnit's cache of previous test results.
+/.phpunit.result.cache
+/.phpunit.cache/
