@@ -44,4 +44,6 @@ composer install   # first time only
 composer test
 ```
 
-The JavaScript in `public/app.js` (portfolio totals, sorting, charts) is not covered by automated tests yet.
+GitHub Actions runs the same checks on every push (`.github/workflows/tests.yml`): a syntax check of all PHP files and `public/app.js`, then the PHPUnit tests. Results are on the repository's **Actions** tab.
+
+The JavaScript in `public/app.js` (portfolio totals, sorting, charts) is only syntax-checked; it is not covered by automated tests yet.
