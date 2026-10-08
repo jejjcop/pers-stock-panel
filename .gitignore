@@ -1,6 +1,9 @@
 # Installed by Composer; recreate with `composer install`.
 /vendor/
 
+# Your stock lists, shares and costs, written by the page as you use it.
+/data/
+
 # PHPUnit's cache of previous test results.
 /.phpunit.result.cache
 /.phpunit.cache/

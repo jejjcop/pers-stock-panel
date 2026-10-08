@@ -5,9 +5,19 @@ const stockBodies = Array.from(document.querySelectorAll('tbody[data-list]'));
 const status = document.getElementById('watchlist-status');
 const refreshButton = document.getElementById('refresh-quotes');
 const refreshCountdown = document.getElementById('refresh-countdown');
-const storageKey = 'stock-panel-added-tickers';
-const holdingsKey = 'stock-panel-holdings';
+// Older versions kept everything in the browser under these keys. They are
+// only read once, to move that data into data/portfolio.json.
+const legacyStocksKey = 'stock-panel-added-tickers';
+const legacyHoldingsKey = 'stock-panel-holdings';
+const legacyMigratedKey = 'stock-panel-moved-to-data-file';
 const holdings = new Map();
+const saveStatus = document.getElementById('save-status');
+const typingSaveDelayMs = 600;
+const saveRetryDelayMs = 10_000;
+let saveTimer = null;
+let saveInFlight = false;
+let saveAgain = false;
+let saveBlocked = false;
 const portfolioSummary = document.getElementById('portfolio-summary');
 const portfolioCost = document.getElementById('portfolio-cost');
 const portfolioValue = document.getElementById('portfolio-value');
@@ -30,9 +40,6 @@ const chartTooltip = document.createElement('div');
 chartTooltip.className = 'chart-tooltip';
 chartTooltip.hidden = true;
 document.body.append(chartTooltip);
-const builtInTickers = new Set(allRows().map((row) => row.dataset.ticker));
-const addedTickers = new Map();
-const removedTickers = new Set();
 const marketOpenRefreshMs = 5_000;
 const extendedHoursRefreshMs = 15_000;
 const marketClosedRefreshMs = 120_000;
@@ -79,35 +86,92 @@ function updateEmptyStates() {
     });
 }
 
-function saveStocks() {
-    localStorage.setItem(storageKey, JSON.stringify({
-        added: Array.from(addedTickers, ([ticker, list]) => ({ ticker, list })),
-        removed: Array.from(removedTickers),
-    }));
-}
-
 function nonNegativeNumber(value) {
     return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-function loadHoldings() {
-    try {
-        const saved = JSON.parse(localStorage.getItem(holdingsKey) || '{}');
-        Object.entries(saved).forEach(([ticker, holding]) => {
-            if (tickerPattern.test(ticker) && holding && typeof holding === 'object') {
-                holdings.set(ticker, {
-                    shares: nonNegativeNumber(holding.shares),
-                    cost: nonNegativeNumber(holding.cost),
-                });
-            }
-        });
-    } catch (error) {
-        showStatus('Could not load your saved shares and costs from this browser.', true);
-    }
+function setHoldings(savedHoldings) {
+    Object.entries(savedHoldings || {}).forEach(([ticker, holding]) => {
+        if (tickerPattern.test(ticker) && holding && typeof holding === 'object') {
+            holdings.set(ticker, {
+                shares: nonNegativeNumber(holding.shares),
+                cost: nonNegativeNumber(holding.cost),
+            });
+        }
+    });
 }
 
-function saveHoldings() {
-    localStorage.setItem(holdingsKey, JSON.stringify(Object.fromEntries(holdings)));
+function showSaveStatus(message, isError = false) {
+    saveStatus.textContent = message;
+    saveStatus.classList.toggle('is-error', isError);
+}
+
+// What gets saved to data/portfolio.json: every stock with its section, and
+// the shares and costs of the stocks still on the page.
+function portfolioState() {
+    const stocks = allRows().map((row) => ({
+        ticker: row.dataset.ticker,
+        list: row.closest('tbody').dataset.list,
+    }));
+    const tickers = new Set(stocks.map((stock) => stock.ticker));
+
+    return {
+        stocks,
+        holdings: Object.fromEntries(Array.from(holdings).filter(([ticker]) => tickers.has(ticker))),
+    };
+}
+
+// Saves shortly after a change; typing waits a moment so that every
+// keystroke does not write the file.
+function scheduleSave(delayMs = 0) {
+    if (saveBlocked) {
+        return;
+    }
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(savePortfolio, delayMs);
+}
+
+async function savePortfolio() {
+    saveTimer = null;
+    if (saveInFlight) {
+        saveAgain = true;
+        return;
+    }
+
+    saveInFlight = true;
+    showSaveStatus('Saving...');
+    try {
+        const response = await fetch('data.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(portfolioState()),
+            cache: 'no-store',
+        });
+        let result = {};
+        try {
+            result = await response.json();
+        } catch (error) {
+            // The error below covers a response that is not JSON.
+        }
+        if (!response.ok) {
+            throw new Error(result.error || `The server returned HTTP ${response.status}.`);
+        }
+
+        const savedAt = new Date(result.savedAt || Date.now()).toLocaleTimeString();
+        showSaveStatus(`All changes saved to data/portfolio.json at ${savedAt}.`);
+        markBrowserDataMoved();
+    } catch (error) {
+        showSaveStatus(`Your latest changes are not saved yet: ${error.message} Trying again in ${saveRetryDelayMs / 1000} seconds.`, true);
+        if (saveTimer === null) {
+            scheduleSave(saveRetryDelayMs);
+        }
+    } finally {
+        saveInFlight = false;
+        if (saveAgain) {
+            saveAgain = false;
+            savePortfolio();
+        }
+    }
 }
 
 function createHoldingInputCell(field, value, label) {
@@ -813,68 +877,127 @@ async function refreshQuotes() {
     }
 }
 
-function loadAddedTickers() {
+let browserDataToMark = false;
+
+// Remembers that this browser's old data now lives in the data file, so it is
+// not copied in again if the file is ever deleted. The old data itself is
+// left in place as a backup.
+function markBrowserDataMoved() {
+    if (!browserDataToMark) {
+        return;
+    }
+
+    browserDataToMark = false;
     try {
-        const saved = localStorage.getItem(storageKey);
-        if (!saved) {
+        localStorage.setItem(legacyMigratedKey, new Date().toISOString());
+    } catch (error) {
+        // Not being able to set the marker only risks a repeat copy later.
+    }
+}
+
+// Applies stock lists and holdings saved by older versions in this browser
+// on top of the starting stocks. Returns whether there was anything to copy.
+function copyBrowserData() {
+    let savedStocks = null;
+    let savedHoldings = null;
+    try {
+        if (localStorage.getItem(legacyMigratedKey)) {
+            return false;
+        }
+        savedStocks = localStorage.getItem(legacyStocksKey);
+        savedHoldings = localStorage.getItem(legacyHoldingsKey);
+    } catch (error) {
+        return false;
+    }
+    if (!savedStocks && !savedHoldings) {
+        return false;
+    }
+
+    try {
+        setHoldings(JSON.parse(savedHoldings || '{}'));
+    } catch (error) {
+        showStatus('The shares and costs saved in this browser could not be read, so they were not copied to the data file.', true);
+    }
+
+    if (savedStocks) {
+        try {
+            applyBrowserStocks(JSON.parse(savedStocks));
+        } catch (error) {
+            showStatus('The stock lists saved in this browser could not be read, so they were not copied to the data file.', true);
+        }
+    }
+
+    browserDataToMark = true;
+    return true;
+}
+
+// The old browser format listed the stocks added on top of the built-in ones,
+// with their section, and the built-in ones that were removed. The oldest
+// format was a plain list of added tickers.
+function applyBrowserStocks(savedWatchlist) {
+    const added = Array.isArray(savedWatchlist) ? savedWatchlist : savedWatchlist.added;
+    const removed = Array.isArray(savedWatchlist) ? [] : savedWatchlist.removed;
+    if (!Array.isArray(added) || !Array.isArray(removed)) {
+        throw new Error('Saved watchlist data is invalid.');
+    }
+
+    allRows().forEach((row) => {
+        if (removed.includes(row.dataset.ticker)) {
+            row.remove();
+        }
+    });
+
+    const placed = new Set();
+    added.forEach((value) => {
+        // Plain ticker strings were in the section now called My current stocks.
+        const entry = typeof value === 'string' ? { ticker: value, list: 'owned' } : value;
+        if (!entry || typeof entry.ticker !== 'string') {
             return;
         }
 
-        const savedWatchlist = JSON.parse(saved);
-        const savedAddedTickers = Array.isArray(savedWatchlist)
-            ? savedWatchlist
-            : savedWatchlist.added;
-        const savedRemovedTickers = Array.isArray(savedWatchlist)
-            ? []
-            : savedWatchlist.removed;
-        if (!Array.isArray(savedAddedTickers) || !Array.isArray(savedRemovedTickers)) {
-            throw new Error('Saved watchlist data is invalid.');
+        const ticker = entry.ticker.trim().toUpperCase();
+        const list = Object.hasOwn(listNames, entry.list) ? entry.list : 'owned';
+        if (!tickerPattern.test(ticker) || placed.has(ticker)) {
+            return;
         }
 
-        savedRemovedTickers.forEach((value) => {
-            if (typeof value === 'string' && tickerPattern.test(value)) {
-                removedTickers.add(value);
-            }
-        });
+        placed.add(ticker);
+        const existingRow = findRow(ticker);
+        if (existingRow) {
+            bodyFor(list).append(existingRow);
+        } else if (allRows().length < maxStocks) {
+            addTickerRow(ticker, list);
+        }
+    });
+}
 
-        allRows().forEach((row) => {
-            if (removedTickers.has(row.dataset.ticker)) {
-                row.remove();
-            }
-        });
-
-        savedAddedTickers.forEach((value) => {
-            // Older saves stored plain ticker strings; those stocks were in the
-            // section that is now "My current stocks".
-            const entry = typeof value === 'string' ? { ticker: value, list: 'owned' } : value;
-            if (!entry || typeof entry.ticker !== 'string') {
-                return;
-            }
-
-            const ticker = entry.ticker.trim().toUpperCase();
-            const list = Object.hasOwn(listNames, entry.list) ? entry.list : 'owned';
-            if (!tickerPattern.test(ticker) || addedTickers.has(ticker)) {
-                return;
-            }
-
-            addedTickers.set(ticker, list);
-            // A saved entry for a built-in stock records which section the
-            // user put it in, so move the server-rendered row there.
-            const builtInRow = findRow(ticker);
-            if (builtInRow) {
-                bodyFor(list).append(builtInRow);
-            } else {
-                addTickerRow(ticker, list);
-            }
-        });
+// Sets up the stocks the page was loaded with, and on the very first visit
+// copies in anything older versions saved in this browser before writing
+// the data file for the first time.
+function initializeStocks() {
+    let pageData = { isNew: false, holdings: {} };
+    try {
+        pageData = JSON.parse(document.getElementById('portfolio-data').textContent);
     } catch (error) {
-        showStatus('Could not load saved stocks from this browser. You can still add stocks for this visit.', true);
-    } finally {
-        allRows().forEach((row) => {
-            addHoldingCells(row);
-            addRemoveButton(row);
-        });
-        updateEmptyStates();
+        // Saving now would overwrite the file without the holdings, so don't.
+        saveBlocked = true;
+        showSaveStatus('The saved data could not be read from the page, so changes will not be saved. Reload the page to try again.', true);
+    }
+    setHoldings(pageData.holdings);
+
+    const copiedBrowserData = pageData.isNew && copyBrowserData();
+
+    allRows().forEach((row) => {
+        addHoldingCells(row);
+        addRemoveButton(row);
+    });
+    updateEmptyStates();
+
+    if (pageData.isNew) {
+        if (copiedBrowserData) {
+            showSaveStatus('Copying the stocks, shares and costs saved in this browser to data/portfolio.json...');
+        }
+        scheduleSave();
     }
 }
 
@@ -916,23 +1039,12 @@ removeDialog.addEventListener('close', () => {
     }
 
     const { row, ticker, listName } = removal;
-    addedTickers.delete(ticker);
-    if (builtInTickers.has(ticker)) {
-        removedTickers.add(ticker);
-    }
-
     holdings.delete(ticker);
     row.remove();
     updateEmptyStates();
     renderPortfolioSummary();
-
-    try {
-        saveStocks();
-        saveHoldings();
-        showStatus(`${ticker} removed from ${listName}.`);
-    } catch (error) {
-        showStatus(`${ticker} was removed for this visit, but the change could not be saved in this browser.`, true);
-    }
+    scheduleSave();
+    showStatus(`${ticker} removed from ${listName}.`);
     tickerInput.focus();
 });
 
@@ -958,23 +1070,11 @@ addStockForm.addEventListener('submit', (event) => {
             return;
         }
 
-        const previousList = addedTickers.get(ticker);
-        try {
-            addedTickers.set(ticker, list);
-            saveStocks();
-        } catch (error) {
-            if (previousList) {
-                addedTickers.set(ticker, previousList);
-            } else {
-                addedTickers.delete(ticker);
-            }
-            showStatus(`Could not save the change for ${ticker} in this browser, so it was not moved.`, true);
-            return;
-        }
         bodyFor(list).append(existingRow);
         sortRowsByDayChange();
         updateEmptyStates();
         renderPortfolioSummary();
+        scheduleSave();
         tickerInput.value = '';
         showStatus(`${ticker} moved from ${listNames[existingList]} to ${listNames[list]}.`);
         return;
@@ -984,21 +1084,9 @@ addStockForm.addEventListener('submit', (event) => {
         return;
     }
 
-    const wasRemoved = removedTickers.has(ticker);
-    try {
-        addedTickers.set(ticker, list);
-        removedTickers.delete(ticker);
-        saveStocks();
-    } catch (error) {
-        addedTickers.delete(ticker);
-        if (wasRemoved) {
-            removedTickers.add(ticker);
-        }
-        showStatus(`Could not save ${ticker} in this browser, so it was not added.`, true);
-        return;
-    }
     addTickerRow(ticker, list);
     updateEmptyStates();
+    scheduleSave();
     tickerInput.value = '';
     showStatus(`${ticker} added to ${listNames[list]}. Fetching its latest price...`);
     refreshQuotes();
@@ -1027,16 +1115,27 @@ stockBodies.forEach((body) => body.addEventListener('input', (event) => {
 
     renderHolding(row);
     renderPortfolioSummary();
-
-    try {
-        saveHoldings();
-    } catch (error) {
-        showStatus(`Could not save the shares and cost for ${ticker} in this browser.`, true);
-    }
+    scheduleSave(typingSaveDelayMs);
 }));
 
-loadHoldings();
-loadAddedTickers();
+// A change made just before the page is closed is still waiting to be saved;
+// send it now. keepalive lets the request finish after the page is gone.
+window.addEventListener('pagehide', () => {
+    if (saveTimer === null || saveBlocked) {
+        return;
+    }
+
+    window.clearTimeout(saveTimer);
+    saveTimer = null;
+    fetch('data.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(portfolioState()),
+        keepalive: true,
+    });
+});
+
+initializeStocks();
 refreshButton.addEventListener('click', refreshQuotes);
 window.setInterval(() => {
     if (!isRefreshing && Date.now() >= nextRefreshAt) {

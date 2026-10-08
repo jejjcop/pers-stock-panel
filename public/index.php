@@ -2,23 +2,45 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../src/StockPanel.php';
+require_once __DIR__ . '/../src/portfolio.php';
 
 use StockPanel\StockPanel;
+
+$portfolioPath = portfolioPath();
+$portfolio = loadPortfolio($portfolioPath);
+$isNewPortfolio = $portfolio === null;
+if ($isNewPortfolio && is_file($portfolioPath)) {
+    // Keep a damaged file instead of overwriting it with the starting stocks.
+    @rename($portfolioPath, $portfolioPath . '.invalid-' . date('Ymd-His'));
+}
+$portfolio ??= defaultPortfolio();
+
+// Names are known up front only for the built-in stocks; the others get
+// theirs with the first price refresh.
+$knownNames = array_column(StockPanel::watchlist(), 'name', 'ticker');
 
 $sections = [
     'owned' => [
         'eyebrow' => 'Portfolio',
         'title' => 'My current stocks',
         'empty' => 'No stocks here yet. Add a ticker above and choose "My current stocks".',
-        'stocks' => StockPanel::watchlist(),
     ],
     'monitor' => [
         'eyebrow' => 'Watchlist',
         'title' => 'Stocks to monitor',
         'empty' => 'No stocks here yet. Add a ticker above and choose "Stocks to monitor".',
-        'stocks' => [],
     ],
+];
+foreach ($sections as $list => $section) {
+    $sections[$list]['stocks'] = array_values(array_filter(
+        $portfolio['stocks'],
+        static fn (array $stock): bool => $stock['list'] === $list
+    ));
+}
+
+$pageData = [
+    'isNew' => $isNewPortfolio,
+    'holdings' => (object) $portfolio['holdings'],
 ];
 ?>
 <!DOCTYPE html>
@@ -27,7 +49,7 @@ $sections = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pers Stock Panel</title>
-    <link rel="stylesheet" href="styles.css?v=14">
+    <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body>
     <div class="page-shell">
@@ -85,6 +107,7 @@ $sections = [
                 </div>
                 <p id="watchlist-status" class="watchlist-status" role="status" aria-live="polite">Connecting to Yahoo Finance...</p>
                 <p id="refresh-countdown" class="refresh-countdown" aria-live="off">Updating prices...</p>
+                <p id="save-status" class="save-status" role="status" aria-live="polite">Your stocks are saved automatically to data/portfolio.json.</p>
             </section>
 
             <?php foreach ($sections as $list => $section): ?>
@@ -143,7 +166,7 @@ $sections = [
                                 <?php foreach ($section['stocks'] as $stock): ?>
                                     <tr data-ticker="<?= htmlspecialchars((string) $stock['ticker']) ?>">
                                         <td><?= htmlspecialchars((string) $stock['ticker']) ?></td>
-                                        <td class="quote-name"><?= htmlspecialchars((string) $stock['name']) ?></td>
+                                        <td class="quote-name"><?= htmlspecialchars($knownNames[$stock['ticker']] ?? '—') ?></td>
                                         <td class="quote-price">—</td>
                                         <td class="quote-change">—</td>
                                         <td class="quote-chart">—</td>
@@ -188,6 +211,7 @@ $sections = [
         </form>
     </dialog>
 
-    <script src="app.js?v=28"></script>
+    <script id="portfolio-data" type="application/json"><?= json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) ?></script>
+    <script src="app.js?v=29"></script>
 </body>
 </html>

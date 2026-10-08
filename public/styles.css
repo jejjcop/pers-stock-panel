@@ -206,7 +206,16 @@ h1 {
 }
 
 .controls-panel .refresh-countdown {
-    margin-bottom: 0;
+    margin-bottom: 6px;
+}
+
+.save-status {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.save-status.is-error {
+    color: var(--danger);
 }
 
 .table-wrap {
