@@ -11,6 +11,10 @@
 /test-results/
 /playwright-report/
 
+# Claude Code: the test hook's record of what it last tested, and personal settings.
+/.claude/hooks/.last-tested
+/.claude/settings.local.json
+
 # PHPUnit's cache of previous test results.
 /.phpunit.result.cache
 /.phpunit.cache/

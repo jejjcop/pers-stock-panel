@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PATH=\"/c/Program Files/nodejs:$PATH\" node \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-tests.js\"",
+            "timeout": 300,
+            "statusMessage": "Running the tests on the changed code..."
+          }
+        ]
+      }
+    ]
+  }
+}
