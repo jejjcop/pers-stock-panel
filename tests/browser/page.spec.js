@@ -1,5 +1,5 @@
 // @ts-check
-const { test, expect, writePortfolio, tickersIn, row } = require('./helpers');
+const { test, expect, writePortfolio, tickersIn, row, quotesResponse } = require('./helpers');
 
 test.describe('the page', () => {
     test.beforeEach(() => {
@@ -56,6 +56,47 @@ test.describe('the page', () => {
         await expect(page.locator('#market-status-label')).toHaveText('Market open');
         await expect(page.locator('#market-status-countdown')).toHaveText(/^US market · closes in 2h [45]m$/);
     });
+
+    // Common laptop and desktop screen widths.
+    for (const width of [1280, 1366, 1536, 1920]) {
+        test(`fits a ${width} pixel wide screen without scrolling sideways`, async ({ page }) => {
+            // A heavy portfolio: big amounts, long names and after-hours prices
+            // make every column as wide as it gets.
+            writePortfolio({
+                stocks: ['MU', 'AAPL', 'MSFT', 'NVDA', 'AMZN', 'META', 'BRK-B', 'TSLA'].map((ticker, index) => ({
+                    ticker,
+                    list: index < 6 ? 'owned' : 'monitor',
+                })),
+                holdings: {
+                    MU: { shares: 12345, cost: 989.5 },
+                    AAPL: { shares: 2500, cost: 150.25 },
+                    MSFT: { shares: 800.5, cost: 410 },
+                },
+            });
+            await page.route('**/quotes.php?*', (route) => {
+                const symbols = (new URL(route.request().url()).searchParams.get('symbols') ?? '').split(',');
+                const response = quotesResponse(symbols);
+                Object.entries(response.quotes).forEach(([ticker, quote]) => {
+                    response.extendedQuotes[ticker] = {
+                        ...response.extendedQuotes[ticker],
+                        activeSession: 'afterHours',
+                        afterHours: { price: quote.price * 1.0123, time: Math.floor(Date.now() / 1000) },
+                    };
+                });
+                return route.fulfill({ json: response });
+            });
+            await page.setViewportSize({ width, height: 900 });
+            await page.goto('/');
+            await expect(row(page, 'MU').locator('.extended-hours-value')).toHaveText(/^After-hours:/);
+
+            const overflow = await page.evaluate(() => ({
+                page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                tables: Array.from(document.querySelectorAll('.table-wrap'), (wrap) => wrap.scrollWidth - wrap.clientWidth),
+            }));
+
+            expect(overflow).toEqual({ page: 0, tables: [0, 0] });
+        });
+    }
 
     test('shows a message instead of an empty table', async ({ page }) => {
         writePortfolio({ stocks: [{ ticker: 'MU', list: 'owned' }] });

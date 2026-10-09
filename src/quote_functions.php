@@ -226,19 +226,24 @@ function marketStatus(array $periods, string $timezone, string $exchange, int $n
 // Three months of daily closes only change once a day, so they are cached
 // briefly on disk instead of being downloaded on every refresh.
 const DAILY_CACHE_SECONDS = 300;
+// Exchange rates are shown as an approximation, so a minute old is fine.
+const FX_CACHE_SECONDS = 60;
 
-function dailyCachePath(string $symbol): string
+/**
+ * A cached Yahoo chart response. $kind names the folder, e.g. 'daily', and
+ * $key the file within it; both only ever contain letters, digits, dots,
+ * hyphens and '=' (from validated tickers), so they are safe as file names.
+ */
+function chartCachePath(string $kind, string $key): string
 {
-    // Symbols are validated to letters, digits, dots and hyphens, so they are
-    // safe to use as file names.
-    return sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'stock-panel-daily' . DIRECTORY_SEPARATOR . $symbol . '.json';
+    return sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'stock-panel-' . $kind . DIRECTORY_SEPARATOR . $key . '.json';
 }
 
-function readDailyCache(string $symbol): ?array
+function readChartCache(string $kind, string $key, int $maxAgeSeconds): ?array
 {
-    $path = dailyCachePath($symbol);
+    $path = chartCachePath($kind, $key);
     $modified = @filemtime($path);
-    if ($modified === false || time() - $modified >= DAILY_CACHE_SECONDS) {
+    if ($modified === false || time() - $modified >= $maxAgeSeconds) {
         return null;
     }
 
@@ -247,9 +252,9 @@ function readDailyCache(string $symbol): ?array
     return $body === false ? null : chartResult($body);
 }
 
-function writeDailyCache(string $symbol, string $body): void
+function writeChartCache(string $kind, string $key, string $body): void
 {
-    $path = dailyCachePath($symbol);
+    $path = chartCachePath($kind, $key);
     $directory = dirname($path);
     if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
         return;
@@ -257,7 +262,7 @@ function writeDailyCache(string $symbol, string $body): void
 
     // Write to a temporary file first so a parallel request never reads a
     // half-written cache file.
-    $temporaryPath = @tempnam($directory, 'daily');
+    $temporaryPath = @tempnam($directory, 'chart');
     if ($temporaryPath === false) {
         return;
     }
@@ -295,6 +300,135 @@ function chartSeries(array $result): array
         : [];
 
     return [$timestamps, $closes];
+}
+
+/**
+ * A request for Yahoo's chart data for one symbol, set up the way Yahoo
+ * accepts it. $query is e.g. 'range=1d&interval=1m'.
+ */
+function yahooChartRequest(string $symbol, string $query): CurlHandle
+{
+    $handle = curl_init('https://query1.finance.yahoo.com/v8/finance/chart/' . rawurlencode($symbol) . '?' . $query);
+    $options = [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS => 3,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_ENCODING => '',
+        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+            'Referer: https://finance.yahoo.com/',
+        ],
+    ];
+    if (PHP_OS_FAMILY === 'Windows' && defined('CURLSSLOPT_NATIVE_CA')) {
+        $options[CURLOPT_SSL_OPTIONS] = CURLSSLOPT_NATIVE_CA;
+    }
+    curl_setopt_array($handle, $options);
+
+    return $handle;
+}
+
+/**
+ * Runs requests in parallel and returns each one's finishRequest() result,
+ * keyed like $handles.
+ *
+ * @param array<string, CurlHandle> $handles
+ * @return array<string, array{result: ?array, body: ?string, error: ?string}>
+ */
+function runRequests(array $handles, bool &$rateLimited): array
+{
+    if ($handles === []) {
+        return [];
+    }
+
+    $multiHandle = curl_multi_init();
+    foreach ($handles as $handle) {
+        curl_multi_add_handle($multiHandle, $handle);
+    }
+
+    do {
+        $multiStatus = curl_multi_exec($multiHandle, $running);
+        if ($running && $multiStatus === CURLM_OK && curl_multi_select($multiHandle, 1.0) === -1) {
+            usleep(10_000);
+        }
+    } while ($running && $multiStatus === CURLM_OK);
+
+    $responses = [];
+    foreach ($handles as $key => $handle) {
+        $responses[$key] = finishRequest($handle, $multiHandle, $multiStatus, $rateLimited);
+    }
+    curl_multi_close($multiHandle);
+
+    return $responses;
+}
+
+/**
+ * The currencies that need an exchange rate to Swedish kronor: every
+ * three-letter currency code among the quotes except SEK itself. Codes like
+ * Yahoo's 'GBp' (pence) are left out.
+ *
+ * @return list<string>
+ */
+function currenciesToConvert(array $quotes): array
+{
+    $currencies = [];
+    foreach ($quotes as $quote) {
+        $currency = $quote['currency'] ?? null;
+        if (is_string($currency) && preg_match('/^[A-Z]{3}$/', $currency) === 1 && $currency !== 'SEK') {
+            $currencies[$currency] = true;
+        }
+    }
+
+    return array_keys($currencies);
+}
+
+/**
+ * Yahoo's symbol for the rate from a currency to kronor, e.g. 'USDSEK=X'.
+ */
+function fxSymbol(string $currency): string
+{
+    return $currency . 'SEK=X';
+}
+
+function fxRate(array $chartResult): ?float
+{
+    $rate = $chartResult['meta']['regularMarketPrice'] ?? null;
+
+    return is_numeric($rate) && (float) $rate > 0 ? (float) $rate : null;
+}
+
+/**
+ * The periods the large chart offers, with the Yahoo range and bar size for
+ * each, and how long a downloaded chart may be reused.
+ */
+const HISTORY_RANGES = [
+    '1d' => ['range' => '1d', 'interval' => '5m', 'cacheSeconds' => 60],
+    '1w' => ['range' => '5d', 'interval' => '30m', 'cacheSeconds' => 300],
+    '1m' => ['range' => '1mo', 'interval' => '60m', 'cacheSeconds' => 900],
+    '1y' => ['range' => '1y', 'interval' => '1d', 'cacheSeconds' => 3600],
+    '5y' => ['range' => '5y', 'interval' => '1wk', 'cacheSeconds' => 3600],
+];
+
+/**
+ * The points of a chart result as [timestamp, close] pairs, without bars
+ * that have no close.
+ *
+ * @return list<array{0: int, 1: float}>
+ */
+function historyPoints(array $chartResult): array
+{
+    [$timestamps, $closes] = chartSeries($chartResult);
+    $points = [];
+    foreach ($timestamps as $index => $timestamp) {
+        $close = $closes[$index] ?? null;
+        if (is_numeric($timestamp) && is_numeric($close)) {
+            $points[] = [(int) $timestamp, round((float) $close, 4)];
+        }
+    }
+
+    return $points;
 }
 
 /**

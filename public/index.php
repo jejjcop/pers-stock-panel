@@ -40,6 +40,10 @@ foreach ($sections as $list => $section) {
 
 $pageData = [
     'isNew' => $isNewPortfolio,
+    'stocks' => array_map(
+        static fn (array $stock): array => $stock + ['name' => $knownNames[$stock['ticker']] ?? null],
+        $portfolio['stocks']
+    ),
     'holdings' => (object) $portfolio['holdings'],
 ];
 ?>
@@ -49,7 +53,7 @@ $pageData = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pers Stock Panel</title>
-    <link rel="stylesheet" href="styles.css?v=15">
+    <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
     <div class="page-shell">
@@ -126,10 +130,12 @@ $pageData = [
                                 <div>
                                     <span>Total value</span>
                                     <strong id="portfolio-value">—</strong>
+                                    <small id="portfolio-value-sek" class="sek-amount" hidden></small>
                                 </div>
                                 <div>
                                     <span>Today</span>
                                     <strong id="portfolio-day">—</strong>
+                                    <small id="portfolio-day-sek" class="sek-amount" hidden></small>
                                 </div>
                                 <div>
                                     <span>Total gain / loss</span>
@@ -139,47 +145,31 @@ $pageData = [
                         <?php endif; ?>
                     </div>
 
+                    <?php if ($list === 'owned'): ?>
+                        <p id="fx-note" class="fx-note" hidden></p>
+                    <?php endif; ?>
+
                     <p id="<?= htmlspecialchars($list) ?>-empty" class="empty-message"<?= $section['stocks'] === [] ? '' : ' hidden' ?>><?= htmlspecialchars($section['empty']) ?></p>
 
                     <div class="table-wrap"<?= $section['stocks'] === [] ? ' hidden' : '' ?>>
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Ticker</th>
-                                    <th>Name</th>
+                                    <th>Stock</th>
                                     <th class="holding-cell">Shares</th>
                                     <th class="holding-cell">Avg cost</th>
-                                    <th class="holding-cell">Total cost</th>
                                     <th>Price</th>
                                     <th class="holding-cell">Value</th>
                                     <th class="holding-cell">Gain / loss</th>
                                     <th class="day-column" aria-sort="descending">Day <span aria-hidden="true">↓</span></th>
-                                    <th>Today</th>
-                                    <th>Week</th>
-                                    <th>Month</th>
-                                    <th>Volume</th>
-                                    <th>Pre-market / After-hours</th>
+                                    <th class="col-chart">Today</th>
+                                    <th>Week / Month</th>
+                                    <th class="col-volume">Volume</th>
                                     <th><span class="visually-hidden">Actions</span></th>
                                 </tr>
                             </thead>
-                            <tbody data-list="<?= htmlspecialchars($list) ?>">
-                                <?php foreach ($section['stocks'] as $stock): ?>
-                                    <tr data-ticker="<?= htmlspecialchars((string) $stock['ticker']) ?>">
-                                        <td><?= htmlspecialchars((string) $stock['ticker']) ?></td>
-                                        <td class="quote-name"><?= htmlspecialchars($knownNames[$stock['ticker']] ?? '—') ?></td>
-                                        <td class="quote-price">—</td>
-                                        <td class="quote-change">—</td>
-                                        <td class="quote-chart">—</td>
-                                        <td class="quote-week">—</td>
-                                        <td class="quote-month">—</td>
-                                        <td class="quote-volume">—</td>
-                                        <td class="extended-hours-cell">
-                                            <span class="extended-hours-value">—</span>
-                                        </td>
-                                        <td class="action-cell"></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
+                            <!-- Rows are built by app.js from the page data below. -->
+                            <tbody data-list="<?= htmlspecialchars($list) ?>"></tbody>
                         </table>
                     </div>
                 </section>
@@ -211,7 +201,33 @@ $pageData = [
         </form>
     </dialog>
 
+    <dialog id="chart-dialog" class="chart-dialog" aria-labelledby="chart-dialog-title">
+        <div class="chart-dialog-header">
+            <div>
+                <h2 id="chart-dialog-title"></h2>
+                <p id="chart-dialog-name" class="chart-dialog-name"></p>
+            </div>
+            <form method="dialog">
+                <button class="secondary-button" type="submit" aria-label="Close chart">Close</button>
+            </form>
+        </div>
+        <div class="chart-dialog-toolbar">
+            <div class="range-buttons" role="group" aria-label="Chart period">
+                <button type="button" data-range="1d" aria-pressed="true">1D</button>
+                <button type="button" data-range="1w" aria-pressed="false">1W</button>
+                <button type="button" data-range="1m" aria-pressed="false">1M</button>
+                <button type="button" data-range="1y" aria-pressed="false">1Y</button>
+                <button type="button" data-range="5y" aria-pressed="false">5Y</button>
+            </div>
+            <p id="chart-dialog-change" class="chart-dialog-change"></p>
+        </div>
+        <div id="chart-dialog-plot" class="chart-dialog-plot">
+            <div id="chart-dialog-tooltip" class="chart-dialog-tooltip" hidden></div>
+        </div>
+        <p id="chart-dialog-status" class="chart-dialog-status" role="status" aria-live="polite"></p>
+    </dialog>
+
     <script id="portfolio-data" type="application/json"><?= json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) ?></script>
-    <script src="app.js?v=29"></script>
+    <script src="app.js?v=31"></script>
 </body>
 </html>

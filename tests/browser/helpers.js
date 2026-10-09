@@ -52,6 +52,8 @@ function quotesResponse(tickers) {
 
     return {
         quotes,
+        // A round rate, so amounts in kronor are easy to check by hand.
+        fxRates: { USD: 10 },
         errors: {},
         extendedQuotes,
         extendedErrors: {},
@@ -66,6 +68,28 @@ function quotesResponse(tickers) {
         },
         rateLimited: false,
         fetchedAt: new Date().toISOString(),
+    };
+}
+
+/**
+ * Made-up closes for the large chart, per period. Only the one-day chart has
+ * a previous close; longer periods compare with their first point.
+ */
+const history = {
+    '1d': { previousClose: 1045.56, closes: [1040, 1060, 1088] },
+    '1y': { previousClose: null, closes: [800, 950, 1088] },
+};
+
+/** A response shaped like public/history.php's. */
+function historyResponse(symbol, range) {
+    const { previousClose, closes } = history[range] ?? { previousClose: null, closes: [1000, 1088] };
+    const now = Math.floor(Date.now() / 1000);
+    return {
+        symbol,
+        range,
+        currency: 'USD',
+        previousClose,
+        points: closes.map((close, index) => [now - (closes.length - 1 - index) * 3600, close]),
     };
 }
 
@@ -113,6 +137,10 @@ const test = base.test.extend({
             const symbols = new URL(route.request().url()).searchParams.get('symbols') ?? '';
             return route.fulfill({ json: quotesResponse(symbols.split(',').filter(Boolean)) });
         });
+        await page.route('**/history.php?*', (route) => {
+            const params = new URL(route.request().url()).searchParams;
+            return route.fulfill({ json: historyResponse(params.get('symbol'), params.get('range')) });
+        });
 
         await use(page);
 
@@ -141,6 +169,7 @@ async function addStock(page, ticker, list) {
 module.exports = {
     test,
     expect: base.expect,
+    quotesResponse,
     writePortfolio,
     readPortfolio,
     savedStocks,

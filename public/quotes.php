@@ -52,57 +52,17 @@ foreach ($symbols as $symbol) {
     }
 }
 
-$dailyHandles = [];
-$minuteHandles = [];
 $dailyResults = [];
-$multiHandle = curl_multi_init();
-$userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-
+$requests = [];
 foreach ($symbols as $symbol) {
-    $baseUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/' . rawurlencode($symbol);
-    $options = [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS => 3,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 12,
-        CURLOPT_ENCODING => '',
-        CURLOPT_USERAGENT => $userAgent,
-        CURLOPT_HTTPHEADER => [
-            'Accept: application/json',
-            'Referer: https://finance.yahoo.com/',
-        ],
-    ];
-
-    if (PHP_OS_FAMILY === 'Windows' && defined('CURLSSLOPT_NATIVE_CA')) {
-        $options[CURLOPT_SSL_OPTIONS] = CURLSSLOPT_NATIVE_CA;
-    }
-
-    $cachedDaily = readDailyCache($symbol);
+    $cachedDaily = readChartCache('daily', $symbol, DAILY_CACHE_SECONDS);
     if ($cachedDaily !== null) {
         $dailyResults[$symbol] = $cachedDaily;
     } else {
-        $dailyHandle = curl_init($baseUrl . '?range=3mo&interval=1d');
-        curl_setopt_array($dailyHandle, $options);
-        curl_multi_add_handle($multiHandle, $dailyHandle);
-        $dailyHandles[$symbol] = $dailyHandle;
+        $requests["daily:{$symbol}"] = yahooChartRequest($symbol, 'range=3mo&interval=1d');
     }
-
-    $minuteHandle = curl_init($baseUrl . '?range=1d&interval=1m&includePrePost=true');
-    curl_setopt_array($minuteHandle, $options);
-    curl_multi_add_handle($multiHandle, $minuteHandle);
-    $minuteHandles[$symbol] = $minuteHandle;
+    $requests["minute:{$symbol}"] = yahooChartRequest($symbol, 'range=1d&interval=1m&includePrePost=true');
 }
-
-do {
-    $multiStatus = curl_multi_exec($multiHandle, $running);
-    if ($running && $multiStatus === CURLM_OK) {
-        $selected = curl_multi_select($multiHandle, 1.0);
-        if ($selected === -1) {
-            usleep(10_000);
-        }
-    }
-} while ($running && $multiStatus === CURLM_OK);
 
 $quotes = [];
 $errors = [];
@@ -115,27 +75,22 @@ $rateLimited = false;
 $now = time();
 
 $freshDaily = [];
-foreach ($dailyHandles as $symbol => $handle) {
-    $response = finishRequest($handle, $multiHandle, $multiStatus, $rateLimited);
-    if ($response['result'] !== null) {
-        $dailyResults[$symbol] = $response['result'];
-        $freshDaily[$symbol] = true;
-        writeDailyCache($symbol, $response['body']);
-    }
-}
-
 $minuteResults = [];
 $minuteErrors = [];
-foreach ($minuteHandles as $symbol => $handle) {
-    $response = finishRequest($handle, $multiHandle, $multiStatus, $rateLimited);
-    if ($response['result'] !== null) {
+foreach (runRequests($requests, $rateLimited) as $key => $response) {
+    [$kind, $symbol] = explode(':', $key, 2);
+    if ($kind === 'daily') {
+        if ($response['result'] !== null) {
+            $dailyResults[$symbol] = $response['result'];
+            $freshDaily[$symbol] = true;
+            writeChartCache('daily', $symbol, $response['body']);
+        }
+    } elseif ($response['result'] !== null) {
         $minuteResults[$symbol] = $response['result'];
     } else {
         $minuteErrors[$symbol] = $response['error'];
     }
 }
-
-curl_multi_close($multiHandle);
 
 foreach ($symbols as $symbol) {
     $minute = $minuteResults[$symbol] ?? null;
@@ -244,8 +199,30 @@ foreach ($symbols as $symbol) {
     ];
 }
 
+// Exchange rates to kronor for the currencies the stocks are priced in, so
+// the page can show the portfolio's value in SEK.
+$fxRates = [];
+$fxRequests = [];
+foreach (currenciesToConvert($quotes) as $currency) {
+    $cachedRate = readChartCache('fx', fxSymbol($currency), FX_CACHE_SECONDS);
+    $rate = $cachedRate !== null ? fxRate($cachedRate) : null;
+    if ($rate !== null) {
+        $fxRates[$currency] = $rate;
+    } else {
+        $fxRequests[$currency] = yahooChartRequest(fxSymbol($currency), 'range=1d&interval=1d');
+    }
+}
+foreach (runRequests($fxRequests, $rateLimited) as $currency => $response) {
+    $rate = $response['result'] !== null ? fxRate($response['result']) : null;
+    if ($rate !== null) {
+        $fxRates[$currency] = $rate;
+        writeChartCache('fx', fxSymbol($currency), $response['body']);
+    }
+}
+
 respond(200, [
     'quotes' => $quotes,
+    'fxRates' => (object) $fxRates,
     'errors' => $errors,
     'extendedQuotes' => $extendedQuotes,
     'extendedErrors' => $extendedErrors,

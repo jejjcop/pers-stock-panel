@@ -5,7 +5,9 @@ A lightweight PHP web app starter for a stock market dashboard.
 ## Features
 
 - Two sections: "My current stocks" and "Stocks to monitor"
-- Enter shares and average cost for stocks you own to see each position's value and gain/loss, plus portfolio totals including today's change and a breakdown of each stock's share of the portfolio
+- Enter shares and average cost for stocks you own to see each position's value, gain/loss and today's gain in money, plus portfolio totals including today's change and a breakdown of each stock's share of the portfolio
+- Total value and today's change also in Swedish kronor, at today's exchange rate from Yahoo Finance (cost and gain stay in the stock's currency, since converting them needs the rate on the day of purchase)
+- Click a ticker or its small chart for a large chart of 1 day, 1 week, 1 month, 1 year or 5 years, with the previous close and your average cost drawn in (`public/history.php`)
 - Day, week, and month price changes, with each section sorted by today's change (best first)
 - A small chart of each stock's price during regular trading hours, with the previous close as a dashed line
 - Add, move and remove stocks in either section

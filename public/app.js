@@ -23,6 +23,11 @@ const portfolioCost = document.getElementById('portfolio-cost');
 const portfolioValue = document.getElementById('portfolio-value');
 const portfolioGain = document.getElementById('portfolio-gain');
 const portfolioDay = document.getElementById('portfolio-day');
+const portfolioValueSek = document.getElementById('portfolio-value-sek');
+const portfolioDaySek = document.getElementById('portfolio-day-sek');
+const fxNote = document.getElementById('fx-note');
+// Exchange rates to Swedish kronor, e.g. { USD: 9.97 }, from the latest refresh.
+let fxRates = {};
 const allocationPanel = document.getElementById('allocation-panel');
 const allocationList = document.getElementById('allocation-list');
 const tickerPattern = /^[A-Z0-9][A-Z0-9.-]{0,9}$/;
@@ -32,7 +37,7 @@ const listNames = {
 };
 const maxStocks = 25;
 const svgNamespace = 'http://www.w3.org/2000/svg';
-const sparklineWidth = 140;
+const sparklineWidth = 120;
 const sparklineHeight = 40;
 const sparklineInset = 3;
 const chartState = new WeakMap();
@@ -195,31 +200,6 @@ function createHoldingInputCell(field, value, label) {
     return cell;
 }
 
-function addHoldingCells(row) {
-    if (row.querySelector('.holding-cell')) {
-        return;
-    }
-
-    const ticker = row.dataset.ticker;
-    const holding = holdings.get(ticker) || {};
-    row.querySelector('.quote-name').after(
-        createHoldingInputCell('shares', holding.shares, `Shares of ${ticker} you own`),
-        createHoldingInputCell('cost', holding.cost, `Average price you paid per ${ticker} share`)
-    );
-    const costTotalCell = document.createElement('td');
-    costTotalCell.className = 'holding-cell holding-cost-total';
-    costTotalCell.textContent = '—';
-    row.querySelectorAll('.holding-cell')[1].after(costTotalCell);
-
-    const valueCell = document.createElement('td');
-    valueCell.className = 'holding-cell holding-value';
-    valueCell.textContent = '—';
-    const gainCell = document.createElement('td');
-    gainCell.className = 'holding-cell holding-gain';
-    gainCell.textContent = '—';
-    row.querySelector('.quote-price').after(valueCell, gainCell);
-}
-
 function formatSignedPrice(value, currency) {
     const sign = value > 0 ? '+' : value < 0 ? '-' : '';
     return `${sign}${formatPrice(Math.abs(value), currency)}`;
@@ -243,6 +223,7 @@ function renderHolding(row) {
     costTotalCell.textContent = holding && Number.isFinite(holding.shares) && Number.isFinite(holding.cost)
         ? formatPrice(holding.shares * holding.cost, currency)
         : '—';
+    renderDayGain(row, holding, price, currency);
     gainCell.classList.remove('trend', 'up', 'down');
     if (!holding || !Number.isFinite(holding.shares) || !Number.isFinite(price)) {
         valueCell.textContent = '—';
@@ -264,6 +245,27 @@ function renderHolding(row) {
     gainCell.classList.add('trend');
     gainCell.classList.toggle('up', gain > 0);
     gainCell.classList.toggle('down', gain < 0);
+}
+
+// How much this holding has gained or lost in money since yesterday's close.
+function renderDayGain(row, holding, price, currency) {
+    const cell = row.querySelector('.holding-day-gain');
+    if (!cell) {
+        return;
+    }
+
+    const previousClose = row.dataset.previousClose ? Number(row.dataset.previousClose) : NaN;
+    cell.classList.remove('trend', 'up', 'down');
+    if (!holding || !Number.isFinite(holding.shares) || !Number.isFinite(price) || !Number.isFinite(previousClose)) {
+        cell.textContent = '—';
+        return;
+    }
+
+    const dayGain = holding.shares * (price - previousClose);
+    cell.textContent = formatSignedPrice(dayGain, currency);
+    cell.classList.add('trend');
+    cell.classList.toggle('up', dayGain > 0);
+    cell.classList.toggle('down', dayGain < 0);
 }
 
 function renderPortfolioSummary() {
@@ -321,7 +323,52 @@ function renderPortfolioSummary() {
     renderChangeParts(portfolioGain, Array.from(totals)
         .filter(([, total]) => total.hasCost)
         .map(([currency, total]) => [currency, total.valueWithCost - total.cost, total.cost]));
+    renderSekAmounts(totals);
     renderAllocation(positions);
+}
+
+// Shows the total value and today's change in Swedish kronor, converted at
+// today's exchange rates. Cost and gain stay in the stocks' own currency:
+// converting them correctly needs the rate on the day each stock was bought.
+function renderSekAmounts(totals) {
+    const currencies = Array.from(totals.keys());
+    const rateFor = (currency) => (currency === 'SEK' ? 1 : fxRates[currency]);
+    const canConvert = currencies.length > 0
+        && currencies.some((currency) => currency !== 'SEK')
+        && currencies.every((currency) => Number.isFinite(rateFor(currency)));
+
+    portfolioValueSek.hidden = !canConvert;
+    portfolioDaySek.hidden = !canConvert;
+    fxNote.hidden = !canConvert;
+    if (!canConvert) {
+        return;
+    }
+
+    let valueSek = 0;
+    let dayChangeSek = 0;
+    totals.forEach((total, currency) => {
+        valueSek += total.value * rateFor(currency);
+        dayChangeSek += total.dayChange * rateFor(currency);
+    });
+
+    portfolioValueSek.textContent = `≈ ${formatSek(valueSek)}`;
+    const sign = dayChangeSek > 0 ? '+' : dayChangeSek < 0 ? '-' : '';
+    portfolioDaySek.textContent = `≈ ${sign}${formatSek(Math.abs(dayChangeSek))}`;
+    portfolioDaySek.classList.toggle('up', dayChangeSek > 0);
+    portfolioDaySek.classList.toggle('down', dayChangeSek < 0);
+
+    const rates = currencies
+        .filter((currency) => currency !== 'SEK')
+        .map((currency) => `1 ${currency} = ${rateFor(currency).toFixed(4)} SEK`);
+    fxNote.textContent = `Amounts in kronor use today's exchange rate: ${rates.join(', ')}. Cost and gain stay in the stocks' own currency.`;
+}
+
+function formatSek(amount) {
+    return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'SEK',
+        maximumFractionDigits: 0,
+    }).format(amount);
 }
 
 // Lists each holding's share of the portfolio, largest first, with a bar
@@ -462,58 +509,80 @@ function updateRefreshCountdown() {
     }
 }
 
-function addRemoveButton(row) {
-    let actionCell = row.querySelector('.action-cell');
-    if (!actionCell) {
-        actionCell = document.createElement('td');
-        actionCell.className = 'action-cell';
-        row.append(actionCell);
-    }
-    if (actionCell.querySelector('button')) {
-        return;
-    }
-
-    const button = document.createElement('button');
-    button.className = 'remove-stock-button';
-    button.type = 'button';
-    button.dataset.action = 'remove';
-    button.textContent = 'Remove';
-    button.setAttribute('aria-label', `Remove ${row.dataset.ticker}`);
-
-    actionCell.append(button);
+function createCell(className) {
+    const cell = document.createElement('td');
+    cell.className = className;
+    return cell;
 }
 
-function addTickerRow(ticker, list) {
+function createSpan(className, text = '—') {
+    const span = document.createElement('span');
+    span.className = className;
+    span.textContent = text;
+    return span;
+}
+
+function createButton(className, action, text) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    button.dataset.action = action;
+    button.textContent = text;
+    return button;
+}
+
+// Builds a stock's table row. Several columns hold two values, with the
+// second one as a small note underneath, so that the table fits on the
+// screen without scrolling sideways.
+function addTickerRow(ticker, list, name = null) {
     const row = document.createElement('tr');
     row.dataset.ticker = ticker;
-    row.classList.add('user-added-stock');
+    const holding = holdings.get(ticker) || {};
 
-    [
-        [ticker, ''],
-        ['—', 'quote-name'],
-        ['—', 'quote-price'],
-        ['—', 'quote-change'],
-        ['—', 'quote-chart'],
-        ['—', 'quote-week'],
-        ['—', 'quote-month'],
-        ['—', 'quote-volume'],
-    ].forEach(([value, className]) => {
-        const cell = document.createElement('td');
-        cell.textContent = value;
-        cell.className = className;
-        row.append(cell);
+    const stockCell = createCell('stock-cell');
+    const tickerButton = createButton('ticker-button', 'chart', ticker);
+    tickerButton.title = `Open a larger chart of ${ticker}`;
+    stockCell.append(tickerButton, createSpan('quote-name', name || '—'));
+
+    const sharesCell = createHoldingInputCell('shares', holding.shares, `Shares of ${ticker} you own`);
+    const costCell = createHoldingInputCell('cost', holding.cost, `Average price you paid per ${ticker} share`);
+    costCell.append(createSpan('cell-note holding-cost-total'));
+
+    const priceCell = createCell('price-cell');
+    priceCell.append(createSpan('quote-price'), createSpan('cell-note extended-hours-value', ''));
+
+    const valueCell = createCell('holding-cell');
+    valueCell.append(createSpan('holding-value'));
+    const gainCell = createCell('holding-cell');
+    gainCell.append(createSpan('holding-gain'));
+
+    const dayCell = createCell('day-cell');
+    dayCell.append(createSpan('quote-change'), createSpan('cell-note holding-cell holding-day-gain'));
+
+    const chartCell = createCell('quote-chart col-chart');
+    chartCell.textContent = '—';
+
+    const periodCell = createCell('period-cell');
+    [['W', 'Week', 'quote-week'], ['M', 'Month', 'quote-month']].forEach(([label, title, className]) => {
+        const line = createSpan('period-line', '');
+        const abbreviation = document.createElement('abbr');
+        abbreviation.className = 'period-label';
+        abbreviation.title = title;
+        abbreviation.textContent = label;
+        line.append(abbreviation, createSpan(className));
+        periodCell.append(line);
     });
 
-    const extendedHoursCell = document.createElement('td');
-    extendedHoursCell.className = 'extended-hours-cell';
-    const extendedHoursValue = document.createElement('span');
-    extendedHoursValue.className = 'extended-hours-value';
-    extendedHoursValue.textContent = '—';
-    extendedHoursCell.append(extendedHoursValue);
-    row.append(extendedHoursCell);
+    const volumeCell = createCell('col-volume');
+    volumeCell.append(createSpan('quote-volume'));
 
-    addHoldingCells(row);
-    addRemoveButton(row);
+    const actionCell = createCell('action-cell');
+    const removeButton = createButton('remove-stock-button', 'remove', '✕');
+    removeButton.title = 'Remove';
+    removeButton.setAttribute('aria-label', `Remove ${ticker}`);
+    actionCell.append(removeButton);
+
+    row.append(stockCell, sharesCell, costCell, priceCell, valueCell, gainCell, dayCell, chartCell, periodCell, volumeCell, actionCell);
     bodyFor(list).append(row);
 }
 
@@ -548,6 +617,8 @@ function renderQuote(row, quote) {
     const volumeCell = row.querySelector('.quote-volume');
 
     nameCell.textContent = quote.name || row.dataset.ticker;
+    // Long names are cut short to keep the column narrow; this shows them in full.
+    nameCell.title = nameCell.textContent;
     row.dataset.currency = quote.currency || 'USD';
     row.dataset.regularPrice = Number.isFinite(quote.price) ? String(quote.price) : '';
     row.dataset.previousClose = Number.isFinite(quote.previousClose) ? String(quote.previousClose) : '';
@@ -577,8 +648,9 @@ function renderExtendedQuote(row, extendedQuote, currency) {
             ? extendedQuote.afterHours
             : null;
 
+    // Shown under the price only while pre-market or after-hours trading is on.
     if (!quote || !Number.isFinite(quote.price)) {
-        element.textContent = '—';
+        element.textContent = '';
         return;
     }
 
@@ -675,7 +747,13 @@ function renderSparkline(row, points, previousClose, currency) {
     });
     svg.append(hoverLine, hoverDot);
 
-    cell.replaceChildren(svg);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'sparkline-button';
+    button.dataset.action = 'chart';
+    button.setAttribute('aria-label', `Open a larger chart of ${row.dataset.ticker}`);
+    button.append(svg);
+    cell.replaceChildren(button);
     chartState.set(cell, { points: validPoints, x, y, currency, hoverLine, hoverDot });
 
     if (!cell.dataset.hoverBound) {
@@ -725,6 +803,235 @@ function hideChartHover(event) {
         chart.hoverDot.setAttribute('visibility', 'hidden');
     }
     chartTooltip.hidden = true;
+}
+
+// The large chart: price history for one stock over a chosen period, opened
+// by clicking a stock's ticker or small chart.
+const chartDialog = document.getElementById('chart-dialog');
+const chartDialogTitle = document.getElementById('chart-dialog-title');
+const chartDialogName = document.getElementById('chart-dialog-name');
+const chartDialogChange = document.getElementById('chart-dialog-change');
+const chartDialogPlot = document.getElementById('chart-dialog-plot');
+const chartDialogTooltip = document.getElementById('chart-dialog-tooltip');
+const chartDialogStatus = document.getElementById('chart-dialog-status');
+const rangeButtons = Array.from(chartDialog.querySelectorAll('[data-range]'));
+const rangeDescriptions = { '1d': 'today', '1w': 'past week', '1m': 'past month', '1y': 'past year', '5y': 'past 5 years' };
+// Room on the left for price labels and on the right for line labels.
+const largeChart = { width: 900, height: 360, left: 76, right: 150, top: 16, bottom: 34 };
+let largeChartTicker = null;
+let largeChartRequest = 0;
+
+function openLargeChart(ticker) {
+    largeChartTicker = ticker;
+    chartDialogTitle.textContent = ticker;
+    const name = findRow(ticker)?.querySelector('.quote-name')?.textContent ?? '';
+    chartDialogName.textContent = name === '—' ? '' : name;
+    chartDialog.showModal();
+    loadLargeChart('1d');
+}
+
+async function loadLargeChart(range) {
+    rangeButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.range === range)));
+    const request = ++largeChartRequest;
+    chartDialogPlot.querySelector('svg')?.remove();
+    chartDialogTooltip.hidden = true;
+    chartDialogChange.textContent = '';
+    chartDialogStatus.classList.remove('is-error');
+    chartDialogStatus.textContent = 'Loading...';
+
+    try {
+        const response = await fetch(`history.php?symbol=${encodeURIComponent(largeChartTicker)}&range=${range}`, {
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+        });
+        let result = {};
+        try {
+            result = await response.json();
+        } catch (error) {
+            // The error below covers a response that is not JSON.
+        }
+        if (!response.ok) {
+            throw new Error(result.error || `The server returned HTTP ${response.status}.`);
+        }
+        // A newer request (another period, or another stock) replaced this one.
+        if (request !== largeChartRequest) {
+            return;
+        }
+
+        const points = (Array.isArray(result.points) ? result.points : [])
+            .filter((point) => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]));
+        if (points.length < 2) {
+            chartDialogStatus.textContent = range === '1d'
+                ? 'No trades yet today. Regular trading starts at 9:30 New York time.'
+                : 'No price history is available for this period.';
+            return;
+        }
+
+        chartDialogStatus.textContent = '';
+        drawLargeChart(points, Number.isFinite(result.previousClose) ? result.previousClose : null, result.currency || 'USD', range);
+    } catch (error) {
+        if (request === largeChartRequest) {
+            chartDialogStatus.textContent = `Could not load the chart: ${error.message}`;
+            chartDialogStatus.classList.add('is-error');
+        }
+    }
+}
+
+// Round, evenly spaced axis values covering low to high, e.g. 1,000 / 1,025 / 1,050.
+function niceTicks(low, high, count) {
+    if (low === high) {
+        low -= 1;
+        high += 1;
+    }
+    const roughStep = (high - low) / (count - 1);
+    const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+    const step = [1, 2, 2.5, 5, 10].map((multiple) => multiple * magnitude).find((candidate) => candidate >= roughStep);
+    // Start at or below low and keep going until high is covered.
+    const ticks = [Number((Math.floor(low / step) * step).toPrecision(12))];
+    while (ticks[ticks.length - 1] < high) {
+        ticks.push(Number((ticks[ticks.length - 1] + step).toPrecision(12)));
+    }
+    return { ticks, step };
+}
+
+function formatChartTime(timestamp, range, detailed) {
+    const date = new Date(timestamp * 1000);
+    switch (range) {
+        case '1d':
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        case '1w':
+            return detailed
+                ? date.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                : date.toLocaleDateString([], { weekday: 'short', day: 'numeric' });
+        case '1m':
+            return detailed
+                ? date.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                : date.toLocaleDateString([], { day: 'numeric', month: 'short' });
+        case '1y':
+            return detailed
+                ? date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
+                : date.toLocaleDateString([], { month: 'short', year: '2-digit' });
+        default:
+            return detailed
+                ? date.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
+                : date.toLocaleDateString([], { month: 'short', year: 'numeric' });
+    }
+}
+
+function describeChange(change, base, currency) {
+    const sign = change > 0 ? '+' : change < 0 ? '-' : '';
+    const percent = base !== 0 ? ` (${sign}${Math.abs((change / base) * 100).toFixed(2)}%)` : '';
+    return `${sign}${formatPrice(Math.abs(change), currency)}${percent}`;
+}
+
+function drawLargeChart(points, previousClose, currency, range) {
+    const { width, height, left, right, top, bottom } = largeChart;
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const prices = points.map((point) => point[1]);
+    const lastPrice = prices[prices.length - 1];
+    // The one-day chart compares with yesterday's close, longer ones with
+    // their first point.
+    const baseline = previousClose ?? prices[0];
+
+    const row = findRow(largeChartTicker);
+    const holding = holdings.get(largeChartTicker);
+    const averageCost = row?.closest('tbody')?.dataset.list === 'owned' && Number.isFinite(holding?.cost) && holding.cost > 0
+        ? holding.cost
+        : null;
+
+    const references = [previousClose, averageCost].filter(Number.isFinite);
+    const { ticks, step } = niceTicks(Math.min(...prices, ...references), Math.max(...prices, ...references), 5);
+    const low = ticks[0];
+    const high = ticks[ticks.length - 1];
+    // Points are spaced evenly, so nights and weekends take no room.
+    const x = (index) => left + (index / (points.length - 1)) * plotWidth;
+    const y = (price) => top + (1 - (price - low) / (high - low)) * plotHeight;
+    const axisPrice = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: step < 1 ? 2 : 0,
+        maximumFractionDigits: step < 1 ? 2 : 0,
+    });
+
+    const trend = lastPrice > baseline ? 'up' : lastPrice < baseline ? 'down' : 'flat';
+    const svg = createSvgElement('svg', {
+        class: `large-chart ${trend}`,
+        viewBox: `0 0 ${width} ${height}`,
+        role: 'img',
+        'aria-label': `${largeChartTicker} ${rangeDescriptions[range]}: from ${formatPrice(prices[0], currency)} to ${formatPrice(lastPrice, currency)}`,
+    });
+
+    ticks.forEach((tick) => {
+        svg.append(createSvgElement('line', { class: 'large-chart-grid', x1: left, x2: left + plotWidth, y1: y(tick), y2: y(tick) }));
+        const label = createSvgElement('text', { class: 'large-chart-axis', x: left - 10, y: y(tick), 'text-anchor': 'end', 'dominant-baseline': 'middle' });
+        label.textContent = axisPrice.format(tick);
+        svg.append(label);
+    });
+
+    const labelCount = Math.min(5, points.length);
+    for (let label = 0; label < labelCount; label += 1) {
+        const index = Math.round((label * (points.length - 1)) / (labelCount - 1));
+        const anchor = label === 0 ? 'start' : label === labelCount - 1 ? 'end' : 'middle';
+        const text = createSvgElement('text', { class: 'large-chart-axis', x: x(index), y: height - 10, 'text-anchor': anchor });
+        text.textContent = formatChartTime(points[index][0], range, false);
+        svg.append(text);
+    }
+
+    const referenceLine = (price, className, text) => {
+        svg.append(createSvgElement('line', { class: className, x1: left, x2: left + plotWidth, y1: y(price), y2: y(price) }));
+        const label = createSvgElement('text', { class: 'large-chart-reference-label', x: left + plotWidth + 8, y: y(price), 'dominant-baseline': 'middle' });
+        label.textContent = `${text} ${formatPrice(price, currency)}`;
+        svg.append(label);
+    };
+    if (Number.isFinite(previousClose)) {
+        referenceLine(previousClose, 'large-chart-previous-close', 'Prev close');
+    }
+    if (averageCost !== null) {
+        referenceLine(averageCost, 'large-chart-average-cost', 'Your avg');
+    }
+
+    const path = points.map(([, price], index) => `${index === 0 ? 'M' : 'L'}${x(index).toFixed(1)},${y(price).toFixed(1)}`).join(' ');
+    svg.append(createSvgElement('path', { class: 'large-chart-line', d: path }));
+
+    const hoverLine = createSvgElement('line', { class: 'large-chart-hover-line', y1: top, y2: top + plotHeight, visibility: 'hidden' });
+    const hoverDot = createSvgElement('circle', { class: 'large-chart-hover-dot', r: 4, visibility: 'hidden' });
+    // A transparent layer over the plot that catches the pointer anywhere,
+    // not only on the thin line.
+    const hitArea = createSvgElement('rect', { class: 'large-chart-hit-area', x: left, y: top, width: plotWidth, height: plotHeight });
+    svg.append(hoverLine, hoverDot, hitArea);
+
+    hitArea.addEventListener('pointermove', (event) => {
+        const bounds = svg.getBoundingClientRect();
+        const pointerX = ((event.clientX - bounds.left) / bounds.width) * width;
+        const index = Math.max(0, Math.min(points.length - 1, Math.round(((pointerX - left) / plotWidth) * (points.length - 1))));
+        const [timestamp, price] = points[index];
+
+        hoverLine.setAttribute('x1', x(index));
+        hoverLine.setAttribute('x2', x(index));
+        hoverDot.setAttribute('cx', x(index));
+        hoverDot.setAttribute('cy', y(price));
+        hoverLine.setAttribute('visibility', 'visible');
+        hoverDot.setAttribute('visibility', 'visible');
+
+        chartDialogTooltip.replaceChildren(
+            Object.assign(document.createElement('strong'), { textContent: formatPrice(price, currency) }),
+            Object.assign(document.createElement('span'), { textContent: formatChartTime(timestamp, range, true) }),
+        );
+        const plotBounds = chartDialogPlot.getBoundingClientRect();
+        chartDialogTooltip.style.left = `${bounds.left - plotBounds.left + (x(index) / width) * bounds.width}px`;
+        chartDialogTooltip.style.top = `${bounds.top - plotBounds.top + (y(price) / height) * bounds.height}px`;
+        chartDialogTooltip.hidden = false;
+    });
+    hitArea.addEventListener('pointerleave', () => {
+        hoverLine.setAttribute('visibility', 'hidden');
+        hoverDot.setAttribute('visibility', 'hidden');
+        chartDialogTooltip.hidden = true;
+    });
+
+    chartDialogPlot.prepend(svg);
+    chartDialogChange.textContent = `${describeChange(lastPrice - baseline, baseline, currency)} ${rangeDescriptions[range]}`;
+    chartDialogChange.className = `chart-dialog-change trend ${trend}`;
 }
 
 function dayChangeOf(row) {
@@ -822,6 +1129,9 @@ async function refreshQuotes() {
             : null;
         renderMarketStatus();
 
+        // Keep the last known rates if this refresh could not get them.
+        fxRates = { ...fxRates, ...(result.fxRates || {}) };
+
         Object.entries(result.quotes || {}).forEach(([ticker, quote]) => {
             const row = findRow(ticker);
             if (row) {
@@ -895,22 +1205,24 @@ function markBrowserDataMoved() {
     }
 }
 
-// Applies stock lists and holdings saved by older versions in this browser
-// on top of the starting stocks. Returns whether there was anything to copy.
-function copyBrowserData() {
+// Reads what older versions saved in this browser. The saved shares and
+// costs go straight into the holdings; the saved stock lists are returned so
+// they can be applied once the starting rows exist.
+function readBrowserData() {
+    const nothing = { found: false, stocks: null };
     let savedStocks = null;
     let savedHoldings = null;
     try {
         if (localStorage.getItem(legacyMigratedKey)) {
-            return false;
+            return nothing;
         }
         savedStocks = localStorage.getItem(legacyStocksKey);
         savedHoldings = localStorage.getItem(legacyHoldingsKey);
     } catch (error) {
-        return false;
+        return nothing;
     }
     if (!savedStocks && !savedHoldings) {
-        return false;
+        return nothing;
     }
 
     try {
@@ -919,16 +1231,8 @@ function copyBrowserData() {
         showStatus('The shares and costs saved in this browser could not be read, so they were not copied to the data file.', true);
     }
 
-    if (savedStocks) {
-        try {
-            applyBrowserStocks(JSON.parse(savedStocks));
-        } catch (error) {
-            showStatus('The stock lists saved in this browser could not be read, so they were not copied to the data file.', true);
-        }
-    }
-
     browserDataToMark = true;
-    return true;
+    return { found: true, stocks: savedStocks };
 }
 
 // The old browser format listed the stocks added on top of the built-in ones,
@@ -984,17 +1288,26 @@ function initializeStocks() {
         showSaveStatus('The saved data could not be read from the page, so changes will not be saved. Reload the page to try again.', true);
     }
     setHoldings(pageData.holdings);
+    // Holdings come first, so that each row is built with its shares and cost.
+    const browserData = pageData.isNew ? readBrowserData() : { found: false, stocks: null };
 
-    const copiedBrowserData = pageData.isNew && copyBrowserData();
-
-    allRows().forEach((row) => {
-        addHoldingCells(row);
-        addRemoveButton(row);
+    (Array.isArray(pageData.stocks) ? pageData.stocks : []).forEach((stock) => {
+        if (stock && tickerPattern.test(stock.ticker) && Object.hasOwn(listNames, stock.list)) {
+            addTickerRow(stock.ticker, stock.list, stock.name);
+        }
     });
+
+    if (browserData.stocks) {
+        try {
+            applyBrowserStocks(JSON.parse(browserData.stocks));
+        } catch (error) {
+            showStatus('The stock lists saved in this browser could not be read, so they were not copied to the data file.', true);
+        }
+    }
     updateEmptyStates();
 
     if (pageData.isNew) {
-        if (copiedBrowserData) {
+        if (browserData.found) {
             showSaveStatus('Copying the stocks, shares and costs saved in this browser to data/portfolio.json...');
         }
         scheduleSave();
@@ -1004,6 +1317,12 @@ function initializeStocks() {
 stockBodies.forEach((body) => body.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) {
+        return;
+    }
+
+    const chartButton = target.closest('button[data-action="chart"]');
+    if (chartButton) {
+        openLargeChart(chartButton.closest('tr').dataset.ticker);
         return;
     }
 
@@ -1133,6 +1452,14 @@ window.addEventListener('pagehide', () => {
         body: JSON.stringify(portfolioState()),
         keepalive: true,
     });
+});
+
+rangeButtons.forEach((button) => button.addEventListener('click', () => loadLargeChart(button.dataset.range)));
+chartDialog.addEventListener('close', () => {
+    // Ignore a chart still loading for the stock that was just closed.
+    largeChartRequest += 1;
+    largeChartTicker = null;
+    chartDialogTooltip.hidden = true;
 });
 
 initializeStocks();
