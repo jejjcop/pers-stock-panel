@@ -1,5 +1,5 @@
 // @ts-check
-const { test, expect, writePortfolio, readPortfolio, savedStocks, tickersIn, row, addStock } = require('./helpers');
+const { test, expect, writePortfolio, readPortfolio, savedStocks, tickersIn, row, addStock, createStream, stubYahoo } = require('./helpers');
 
 test.describe('saving to data/portfolio.json', () => {
     test.beforeEach(() => {
@@ -90,6 +90,7 @@ test.describe('saving to data/portfolio.json', () => {
 
         // A new context has no cookies or browser storage, like another browser.
         const otherBrowser = await browser.newContext();
+        await stubYahoo(otherBrowser, createStream());
         const otherPage = await otherBrowser.newPage();
         await otherPage.goto('/');
 

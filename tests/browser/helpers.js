@@ -118,13 +118,108 @@ function savedStocks() {
 }
 
 /**
+ * Encodes a price update the way Yahoo's stream does: a protobuf
+ * PricingData message, base64-encoded. marketHours: 0 pre-market,
+ * 1 regular, 2 after-hours.
+ */
+function encodePricingData({ ticker, price, time = Date.now(), marketHours = 1, changePercent = null }) {
+    const bytes = [];
+    const varint = (number) => {
+        let value = BigInt(number);
+        while (value > 127n) {
+            bytes.push(Number(value & 127n) | 128);
+            value >>= 7n;
+        }
+        bytes.push(Number(value));
+    };
+    const tag = (field, wireType) => varint((field << 3) | wireType);
+    const float = (field, number) => {
+        const buffer = Buffer.alloc(4);
+        buffer.writeFloatLE(number);
+        tag(field, 5);
+        bytes.push(...buffer);
+    };
+
+    const id = Buffer.from(ticker);
+    tag(1, 2);
+    varint(id.length);
+    bytes.push(...id);
+    float(2, price);
+    tag(3, 0);
+    varint(BigInt(time) << 1n); // zigzag encoding of a positive number
+    tag(7, 0);
+    varint(marketHours);
+    if (changePercent !== null) {
+        float(8, changePercent);
+    }
+    return Buffer.from(bytes).toString('base64');
+}
+
+/**
+ * A stand-in for Yahoo's live price stream. Tests can send trades with
+ * send(), see what the page subscribed to, and make the stream refuse
+ * connections or drop them.
+ */
+function createStream() {
+    const stream = {
+        connections: [],
+        // How many times the page has connected, including reconnections.
+        connectionCount: 0,
+        subscribed: new Set(),
+        refuse: false,
+        send(update) {
+            const text = JSON.stringify({ type: 'pricing', message: encodePricingData(update) });
+            stream.connections.forEach((connection) => connection.send(text));
+        },
+        dropAll() {
+            stream.subscribed.clear();
+            stream.connections.splice(0).forEach((connection) => connection.close({ code: 1001 }));
+        },
+    };
+    return stream;
+}
+
+/**
+ * Answers a page's (or a whole browser context's) requests to Yahoo with
+ * made-up data, so tests never touch the network: quote and history
+ * requests through the app's PHP endpoints, and the live price stream.
+ */
+async function stubYahoo(target, stream) {
+    await target.routeWebSocket(/streamer\.finance\.yahoo\.com/, (connection) => {
+        stream.connectionCount += 1;
+        if (stream.refuse) {
+            connection.close({ code: 1011 });
+            return;
+        }
+        stream.connections.push(connection);
+        connection.onMessage((message) => {
+            const request = JSON.parse(String(message));
+            (request.subscribe ?? []).forEach((ticker) => stream.subscribed.add(ticker));
+            (request.unsubscribe ?? []).forEach((ticker) => stream.subscribed.delete(ticker));
+        });
+    });
+    await target.route('**/quotes.php?*', (route) => {
+        const symbols = new URL(route.request().url()).searchParams.get('symbols') ?? '';
+        return route.fulfill({ json: quotesResponse(symbols.split(',').filter(Boolean)) });
+    });
+    await target.route('**/history.php?*', (route) => {
+        const params = new URL(route.request().url()).searchParams;
+        return route.fulfill({ json: historyResponse(params.get('symbol'), params.get('range')) });
+    });
+}
+
+/**
  * The Playwright test function with every page's Yahoo requests answered
- * by quotesResponse(), and failing on any JavaScript error the page shows,
- * other than ones matching the test's expectedConsoleErrors.
+ * by quotesResponse() and its live stream replaced by the `stream` fixture,
+ * failing on any JavaScript error the page shows, other than ones matching
+ * the test's expectedConsoleErrors.
  */
 const test = base.test.extend({
     expectedConsoleErrors: [/** @type {RegExp[]} */ ([]), { option: true }],
-    page: async ({ page, expectedConsoleErrors }, use) => {
+    stream: async ({}, use) => {
+        await use(createStream());
+    },
+    page: async ({ page, expectedConsoleErrors, stream }, use) => {
         const errors = [];
         page.on('pageerror', (error) => errors.push(error.message));
         page.on('console', (message) => {
@@ -133,14 +228,7 @@ const test = base.test.extend({
                 errors.push(text);
             }
         });
-        await page.route('**/quotes.php?*', (route) => {
-            const symbols = new URL(route.request().url()).searchParams.get('symbols') ?? '';
-            return route.fulfill({ json: quotesResponse(symbols.split(',').filter(Boolean)) });
-        });
-        await page.route('**/history.php?*', (route) => {
-            const params = new URL(route.request().url()).searchParams;
-            return route.fulfill({ json: historyResponse(params.get('symbol'), params.get('range')) });
-        });
+        await stubYahoo(page, stream);
 
         await use(page);
 
@@ -170,6 +258,8 @@ module.exports = {
     test,
     expect: base.expect,
     quotesResponse,
+    createStream,
+    stubYahoo,
     writePortfolio,
     readPortfolio,
     savedStocks,

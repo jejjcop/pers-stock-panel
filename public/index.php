@@ -53,7 +53,7 @@ $pageData = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pers Stock Panel</title>
-    <link rel="stylesheet" href="styles.css?v=17">
+    <link rel="stylesheet" href="styles.css?v=18">
 </head>
 <body>
     <div class="page-shell">
@@ -110,6 +110,10 @@ $pageData = [
                     </div>
                 </div>
                 <p id="watchlist-status" class="watchlist-status" role="status" aria-live="polite">Connecting to Yahoo Finance...</p>
+                <p id="stream-status" class="stream-status" data-state="connecting">
+                    <span class="stream-status-dot" aria-hidden="true"></span>
+                    <span id="stream-status-text">Connecting to live prices...</span>
+                </p>
                 <p id="refresh-countdown" class="refresh-countdown" aria-live="off">Updating prices...</p>
                 <p id="save-status" class="save-status" role="status" aria-live="polite">Your stocks are saved automatically to data/portfolio.json.</p>
             </section>
@@ -228,6 +232,7 @@ $pageData = [
     </dialog>
 
     <script id="portfolio-data" type="application/json"><?= json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) ?></script>
-    <script src="app.js?v=31"></script>
+    <script src="price-stream.js?v=1"></script>
+    <script src="app.js?v=32"></script>
 </body>
 </html>

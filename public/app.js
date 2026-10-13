@@ -48,6 +48,19 @@ document.body.append(chartTooltip);
 const marketOpenRefreshMs = 5_000;
 const extendedHoursRefreshMs = 15_000;
 const marketClosedRefreshMs = 120_000;
+// While live prices stream in, the rest (volume, charts, week and month,
+// market hours) only needs refreshing once a minute.
+const streamingRefreshMs = 60_000;
+// A stream with no trades for this long while the market is open is treated
+// as broken: polling takes over and the stream reconnects.
+const streamQuietLimitMs = 30_000;
+// The refresh rate the market session calls for when there is no stream.
+let pollingRefreshMs = marketOpenRefreshMs;
+let priceStream = null;
+let streamState = 'connecting';
+let streamRenderTimer = null;
+const streamStatus = document.getElementById('stream-status');
+const streamStatusText = document.getElementById('stream-status-text');
 const maxRefreshMs = 120_000;
 const maxBackoffLevel = 4;
 let baseRefreshMs = marketOpenRefreshMs;
@@ -70,6 +83,22 @@ let pendingRemoval = null;
 let isRefreshing = false;
 let refreshQueued = false;
 let nextRefreshAt = Date.now() + refreshIntervalMs;
+let lastRefreshEndedAt = 0;
+
+// The next refresh comes one interval after the last one ended, or right as
+// the next market session starts or ends if that is sooner, so a long
+// closed-market wait never delays the first pre-market prices. Called again
+// when the interval changes, e.g. when the live stream connects or drops.
+function scheduleNextRefresh() {
+    nextRefreshAt = (lastRefreshEndedAt || Date.now()) + refreshIntervalMs;
+    const nextChangeMs = marketState && Number.isFinite(marketState.nextSessionChangeAt)
+        ? marketState.nextSessionChangeAt * 1000 + 1000
+        : NaN;
+    if (nextChangeMs > Date.now()) {
+        nextRefreshAt = Math.min(nextRefreshAt, nextChangeMs);
+    }
+    updateRefreshCountdown();
+}
 
 function allRows() {
     return stockBodies.flatMap((body) => Array.from(body.querySelectorAll('tr')));
@@ -481,7 +510,110 @@ function renderMarketStatus() {
 // the wait each time, and returns to the normal rate after a clean refresh.
 function applyBackoff(slowDown) {
     backoffLevel = slowDown ? Math.min(backoffLevel + 1, maxBackoffLevel) : 0;
+    updateRefreshRate();
+}
+
+function updateRefreshRate() {
+    baseRefreshMs = streamIsLive() ? Math.max(pollingRefreshMs, streamingRefreshMs) : pollingRefreshMs;
     refreshIntervalMs = Math.min(baseRefreshMs * 2 ** backoffLevel, maxRefreshMs);
+}
+
+// The stream counts as working when it is connected and, while the market is
+// open, has delivered a trade recently.
+function streamIsQuiet() {
+    return marketState?.session === 'open' && Date.now() - priceStream.lastActivityAt() > streamQuietLimitMs;
+}
+
+function streamIsLive() {
+    return Boolean(priceStream?.isLive()) && !streamIsQuiet();
+}
+
+function renderStreamStatus() {
+    const shownState = streamIsLive() ? 'live' : streamState === 'live' ? 'quiet' : streamState;
+    streamStatus.dataset.state = shownState;
+    streamStatusText.textContent = {
+        live: 'Live prices: updated the moment a trade happens.',
+        quiet: 'Live prices have gone quiet, so prices are checked regularly while the stream reconnects.',
+        connecting: 'Connecting to live prices...',
+        down: 'Live prices are unavailable right now, so prices are checked regularly instead. Retrying automatically.',
+    }[shownState];
+}
+
+function handleStreamStateChange(state) {
+    streamState = state;
+    updateRefreshRate();
+    // Sooner when the stream drops, later when it connects.
+    if (!isRefreshing) {
+        scheduleNextRefresh();
+    }
+    renderStreamStatus();
+    if (statusShowsRefreshNote) {
+        showRefreshNote();
+    }
+}
+
+function syncStreamTickers() {
+    priceStream?.setTickers(allRows().map((row) => row.dataset.ticker));
+}
+
+function flashPrice(cell, rose) {
+    cell.classList.remove('flash-up', 'flash-down');
+    // Reading the layout restarts the animation when the class comes back.
+    void cell.offsetWidth;
+    cell.classList.add(rose ? 'flash-up' : 'flash-down');
+}
+
+// Re-sorting and the portfolio totals follow streamed prices at most once a
+// second, so a burst of trades does not make the page jump around.
+function scheduleStreamRender() {
+    if (streamRenderTimer !== null) {
+        return;
+    }
+    streamRenderTimer = window.setTimeout(() => {
+        streamRenderTimer = null;
+        sortRowsByDayChange();
+        renderPortfolioSummary();
+    }, 1000);
+}
+
+// A trade from the live stream. During regular hours it updates the price,
+// today's change and the holding; before and after hours it updates the
+// pre-market or after-hours note under the price.
+function applyStreamPrice(update) {
+    const row = findRow(update.ticker);
+    if (!row) {
+        return;
+    }
+
+    const currency = row.dataset.currency || 'USD';
+    if (update.session !== 'regular') {
+        const sessionQuote = { price: update.price };
+        renderExtendedQuote(row, { activeSession: update.session, preMarket: sessionQuote, afterHours: sessionQuote }, currency);
+        return;
+    }
+
+    const previousPrice = rowPrice(row);
+    const priceCell = row.querySelector('.quote-price');
+    row.dataset.regularPrice = String(update.price);
+    row.dataset.streamTime = String(update.time || Date.now());
+    priceCell.textContent = formatPrice(update.price, currency);
+
+    const previousClose = row.dataset.previousClose ? Number(row.dataset.previousClose) : NaN;
+    const changePct = Number.isFinite(previousClose) && previousClose !== 0
+        ? ((update.price - previousClose) / previousClose) * 100
+        : update.changePercent;
+    row.dataset.changePct = Number.isFinite(changePct) ? String(changePct) : '';
+    renderPercentChange(row.querySelector('.quote-change'), changePct);
+    renderHolding(row);
+
+    const extendedNote = row.querySelector('.extended-hours-value');
+    extendedNote.textContent = '';
+    extendedNote.classList.remove('up', 'down');
+
+    if (Number.isFinite(previousPrice) && update.price !== previousPrice) {
+        flashPrice(priceCell, update.price > previousPrice);
+    }
+    scheduleStreamRender();
 }
 
 function describeRefreshInterval() {
@@ -493,9 +625,24 @@ function describeRefreshInterval() {
     return `${seconds} seconds`;
 }
 
+// The latest successful refresh, so its note can be rewritten when the
+// refresh rate changes (e.g. the stream connects) before the next refresh.
+let lastRefresh = null;
+let statusShowsRefreshNote = false;
+
 function showStatus(message, isError = false) {
     status.textContent = message;
     status.classList.toggle('is-error', isError);
+    statusShowsRefreshNote = false;
+}
+
+function showRefreshNote() {
+    const { updatedAt, sessionNote } = lastRefresh;
+    const rate = streamIsLive()
+        ? `prices stream live; other figures refresh every ${describeRefreshInterval()}.`
+        : `refreshing every ${describeRefreshInterval()}.`;
+    showStatus(`Prices updated at ${updatedAt} from Yahoo Finance. ${sessionNote}: ${rate}`);
+    statusShowsRefreshNote = true;
 }
 
 function updateRefreshCountdown() {
@@ -619,15 +766,25 @@ function renderQuote(row, quote) {
     nameCell.textContent = quote.name || row.dataset.ticker;
     // Long names are cut short to keep the column narrow; this shows them in full.
     nameCell.title = nameCell.textContent;
+
+    // A price from the live stream that is newer than this quote is kept.
+    const streamTime = Number(row.dataset.streamTime || 0);
+    const quoteTime = Number.isFinite(quote.marketTime) ? quote.marketTime * 1000 : 0;
+    const keepStreamPrice = streamTime > quoteTime && Number.isFinite(rowPrice(row));
+    const price = keepStreamPrice ? rowPrice(row) : quote.price;
+    const changePct = keepStreamPrice && Number.isFinite(quote.previousClose) && quote.previousClose !== 0
+        ? ((price - quote.previousClose) / quote.previousClose) * 100
+        : quote.changePct;
+
     row.dataset.currency = quote.currency || 'USD';
-    row.dataset.regularPrice = Number.isFinite(quote.price) ? String(quote.price) : '';
+    row.dataset.regularPrice = Number.isFinite(price) ? String(price) : '';
     row.dataset.previousClose = Number.isFinite(quote.previousClose) ? String(quote.previousClose) : '';
-    row.dataset.changePct = Number.isFinite(quote.changePct) ? String(quote.changePct) : '';
-    priceCell.textContent = Number.isFinite(quote.price)
-        ? formatPrice(quote.price, quote.currency)
+    row.dataset.changePct = Number.isFinite(changePct) ? String(changePct) : '';
+    priceCell.textContent = Number.isFinite(price)
+        ? formatPrice(price, quote.currency)
         : '—';
 
-    renderPercentChange(changeCell, quote.changePct);
+    renderPercentChange(changeCell, changePct);
     renderPercentChange(weekCell, quote.weekChangePct);
     renderPercentChange(monthCell, quote.monthChangePct);
 
@@ -1110,7 +1267,14 @@ async function refreshQuotes() {
             throw new Error(result.error || `Quote service returned HTTP ${response.status}.`);
         }
 
-        baseRefreshMs = result.marketOpen
+        // Known before the refresh rate is worked out, since whether the
+        // stream counts as working depends on whether the market is open.
+        const market = result.market;
+        marketState = market && Object.hasOwn(sessionLabels, market.session) && Number.isFinite(market.nextChangeAt)
+            ? market
+            : null;
+
+        pollingRefreshMs = result.marketOpen
             ? marketOpenRefreshMs
             : result.tradingActive
                 ? extendedHoursRefreshMs
@@ -1121,12 +1285,6 @@ async function refreshQuotes() {
             : result.tradingActive
                 ? 'Pre-market or after-hours trading'
                 : 'Market closed';
-        const refreshNote = `${sessionNote}: refreshing every ${describeRefreshInterval()}.`;
-
-        const market = result.market;
-        marketState = market && Object.hasOwn(sessionLabels, market.session) && Number.isFinite(market.nextChangeAt)
-            ? market
-            : null;
         renderMarketStatus();
 
         // Keep the last known rates if this refresh could not get them.
@@ -1161,7 +1319,8 @@ async function refreshQuotes() {
         } else if (extendedFailures.length > 0) {
             showStatus(`Prices updated at ${updatedAt}, but extended-hours data is unavailable for: ${extendedFailures.join(', ')}.`, true);
         } else {
-            showStatus(`Prices updated at ${updatedAt} from Yahoo Finance. ${refreshNote}`);
+            lastRefresh = { updatedAt, sessionNote };
+            showRefreshNote();
         }
     } catch (error) {
         applyBackoff(true);
@@ -1170,16 +1329,8 @@ async function refreshQuotes() {
         isRefreshing = false;
         refreshButton.disabled = false;
         refreshButton.textContent = 'Refresh prices';
-        nextRefreshAt = Date.now() + refreshIntervalMs;
-        // Refresh right as the next session starts or ends, so a long
-        // closed-market wait never delays the first pre-market prices.
-        const nextChangeMs = marketState && Number.isFinite(marketState.nextSessionChangeAt)
-            ? marketState.nextSessionChangeAt * 1000 + 1000
-            : NaN;
-        if (nextChangeMs > Date.now()) {
-            nextRefreshAt = Math.min(nextRefreshAt, nextChangeMs);
-        }
-        updateRefreshCountdown();
+        lastRefreshEndedAt = Date.now();
+        scheduleNextRefresh();
         if (refreshQueued) {
             refreshQueued = false;
             refreshQuotes();
@@ -1360,6 +1511,7 @@ removeDialog.addEventListener('close', () => {
     const { row, ticker, listName } = removal;
     holdings.delete(ticker);
     row.remove();
+    syncStreamTickers();
     updateEmptyStates();
     renderPortfolioSummary();
     scheduleSave();
@@ -1404,6 +1556,7 @@ addStockForm.addEventListener('submit', (event) => {
     }
 
     addTickerRow(ticker, list);
+    syncStreamTickers();
     updateEmptyStates();
     scheduleSave();
     tickerInput.value = '';
@@ -1463,8 +1616,17 @@ chartDialog.addEventListener('close', () => {
 });
 
 initializeStocks();
+if (typeof PriceStream !== 'undefined') {
+    priceStream = PriceStream.create({ onPrice: applyStreamPrice, onStateChange: handleStreamStateChange });
+    syncStreamTickers();
+} else {
+    handleStreamStateChange('down');
+}
 refreshButton.addEventListener('click', refreshQuotes);
 window.setInterval(() => {
+    if (priceStream?.isLive() && streamIsQuiet()) {
+        priceStream.reconnect();
+    }
     if (!isRefreshing && Date.now() >= nextRefreshAt) {
         refreshQuotes();
     }

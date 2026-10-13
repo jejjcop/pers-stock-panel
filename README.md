@@ -12,7 +12,8 @@ A lightweight PHP web app starter for a stock market dashboard.
 - A small chart of each stock's price during regular trading hours, with the previous close as a dashed line
 - Add, move and remove stocks in either section
 - Stock lists, shares and costs are saved automatically to `data/portfolio.json`
-- Live Yahoo Finance prices, refreshed every 5 seconds during regular trading hours, every 15 seconds during pre-market and after-hours trading, and every 2 minutes when nothing is trading (with an extra refresh as each session starts or ends)
+- Live prices as trades happen, from Yahoo Finance's websocket stream (`public/price-stream.js`): during regular hours they update the price, today's change and your holdings, with a brief green or red flash; before and after hours they update the pre-market or after-hours price under it. The stream is unofficial; its messages are protobuf, decoded with field numbers from the open-source yfinance project
+- While prices stream, everything else (volume, charts, week and month, market hours) refreshes once a minute. Without the stream — it cannot be reached, drops, or goes quiet for 30 seconds with the market open — the page polls instead: every 5 seconds during regular trading hours, every 15 seconds during pre-market and after-hours trading, and every 2 minutes when nothing is trading (with an extra refresh as each session starts or ends), and keeps trying to reconnect
 - Pre-market and after-hours prices when extended-hours quotes are available
 - Market status badge (open, pre-market, after-hours or closed) with a countdown to the next open or close; it follows the US market when you track any US stock, and does not know about exchange holidays when counting down over a weekend
 - Refreshes slow down automatically (up to every 2 minutes) if Yahoo Finance rate-limits requests or the quote service fails, and return to normal once a refresh succeeds

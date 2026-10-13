@@ -367,6 +367,62 @@ th.day-column {
     color: var(--danger);
 }
 
+.stream-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: -6px 0 12px;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.stream-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+}
+
+.stream-status[data-state="live"] .stream-status-dot {
+    background: var(--green);
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2);
+}
+
+.stream-status[data-state="quiet"] .stream-status-dot,
+.stream-status[data-state="down"] .stream-status-dot {
+    background: var(--gold);
+}
+
+/* A brief tint when a live trade moves the price. */
+.quote-price {
+    border-radius: 4px;
+}
+
+.quote-price.flash-up {
+    animation: flash-up 1s ease-out;
+}
+
+.quote-price.flash-down {
+    animation: flash-down 1s ease-out;
+}
+
+@keyframes flash-up {
+    from { background: rgba(52, 211, 153, 0.35); }
+    to { background: transparent; }
+}
+
+@keyframes flash-down {
+    from { background: rgba(248, 113, 113, 0.35); }
+    to { background: transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .quote-price.flash-up,
+    .quote-price.flash-down {
+        animation: none;
+    }
+}
+
 .refresh-countdown {
     margin: -10px 0 14px;
     color: var(--muted);
