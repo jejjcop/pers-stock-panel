@@ -21,14 +21,11 @@ New-Item -ItemType Directory -Force $InstallRoot | Out-Null
 
 if (Test-Path (Join-Path $AppDir '.git')) {
     Write-Log "Updating the installed app in $AppDir."
-    & $Git -C $AppDir fetch --quiet origin main
-    & $Git -C $AppDir merge --ff-only --quiet origin/main
+    Invoke-Git @('-C', $AppDir, 'fetch', '--quiet', 'origin', 'main') | Out-Null
+    Invoke-Git @('-C', $AppDir, 'merge', '--ff-only', '--quiet', 'origin/main') | Out-Null
 } else {
     Write-Log "Installing the app from GitHub into $AppDir."
-    & $Git clone --quiet "https://github.com/$Repository.git" $AppDir
-}
-if ($LASTEXITCODE -ne 0) {
-    throw 'Could not get the app from GitHub.'
+    Invoke-Git @('clone', '--quiet', "https://github.com/$Repository.git", $AppDir) | Out-Null
 }
 if (-not (Test-Path (Join-Path $AppDir 'deploy\start-server.ps1'))) {
     throw 'The version on GitHub does not contain the deploy scripts yet. Push them first.'

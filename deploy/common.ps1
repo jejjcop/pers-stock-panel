@@ -50,6 +50,28 @@ function Read-Settings {
     return Get-Content -Raw -Path $SettingsFile -Encoding utf8 | ConvertFrom-Json
 }
 
+# Runs a program and returns its output; throws with the program's own
+# message if it fails. Both output streams are captured: in a scheduled task
+# with no console, git fails when its error output goes nowhere, and Windows
+# PowerShell would otherwise treat that output as errors.
+function Invoke-Tool([string] $Path, [string] $Name, [string[]] $Arguments) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $Path @Arguments 2>&1 | ForEach-Object { "$_" }
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Name $($Arguments -join ' ') failed: $(($output | Where-Object { $_ }) -join ' / ')"
+    }
+    return $output
+}
+
+function Invoke-Git([string[]] $Arguments) {
+    return Invoke-Tool $Git 'git' $Arguments
+}
+
 function Test-PortInUse([int] $Port) {
     return [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
 }

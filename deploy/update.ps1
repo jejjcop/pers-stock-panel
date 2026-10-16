@@ -5,19 +5,17 @@
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 try {
-    & $Git -C $AppDir fetch --quiet origin main
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Could not reach GitHub.'
-    }
+    Invoke-Git @('-C', $AppDir, 'fetch', '--quiet', 'origin', 'main') | Out-Null
 
-    $installed = (& $Git -C $AppDir rev-parse HEAD).Trim()
-    $newest = (& $Git -C $AppDir rev-parse origin/main).Trim()
+    $installed = "$(Invoke-Git @('-C', $AppDir, 'rev-parse', 'HEAD'))".Trim()
+    $newest = "$(Invoke-Git @('-C', $AppDir, 'rev-parse', 'origin/main'))".Trim()
     if ($installed -eq $newest) {
         exit 0
     }
 
     $short = $newest.Substring(0, 7)
-    $runs = & $Gh run list --repo $Repository --workflow tests.yml --commit $newest --limit 1 --json status,conclusion | ConvertFrom-Json
+    $runs = Invoke-Tool $Gh 'gh' @('run', 'list', '--repo', $Repository, '--workflow', 'tests.yml', '--commit', $newest, '--limit', '1', '--json', 'status,conclusion') |
+        Out-String | ConvertFrom-Json
     if (-not $runs) {
         Write-Log "Version $short has no test run on GitHub yet; trying again later."
         exit 0
@@ -33,11 +31,8 @@ try {
 
     # The installed copy is never edited by hand, so it can always move
     # straight forward to the new version.
-    & $Git -C $AppDir merge --ff-only --quiet origin/main
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not move to version $short."
-    }
-    $subject = (& $Git -C $AppDir log -1 --format=%s).Trim()
+    Invoke-Git @('-C', $AppDir, 'merge', '--ff-only', '--quiet', 'origin/main') | Out-Null
+    $subject = "$(Invoke-Git @('-C', $AppDir, 'log', '-1', '--format=%s'))".Trim()
     Write-Log "Installed version $short ($subject). The page shows it after a reload."
 }
 catch {
