@@ -62,7 +62,9 @@ Register-ScheduledTask -TaskName $UpdateTaskName -Force -Principal $principal -S
     -Description 'Installs new versions of Pers Stock Panel from GitHub once their tests have passed.' | Out-Null
 Write-Log "Scheduled tasks '$ServerTaskName' and '$UpdateTaskName' are set up."
 
-if (Test-PortInUse $Port) {
+if ((Get-ScheduledTask -TaskName $ServerTaskName).State -eq 'Running') {
+    Write-Log "The server is already running: open http://127.0.0.1:$Port"
+} elseif (Test-PortInUse $Port) {
     Write-Log "Port $Port is in use by another program (probably a server started by hand). Close it, then run: Start-ScheduledTask '$ServerTaskName'"
 } else {
     Start-ScheduledTask -TaskName $ServerTaskName

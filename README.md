@@ -48,6 +48,8 @@ powershell -ExecutionPolicy Bypass -File deploy\uninstall.ps1   # remove the tas
 
 So a change goes: edit here → tests → commit → push → tests on GitHub → installed within 15 minutes → reload the page.
 
+If the page does not change after a push, check the log: it says when a version is still being tested, failed its tests, or could not be fetched (with git's or GitHub's own message).
+
 ## Your data
 
 Your stock lists, shares and average costs are saved to `data/portfolio.json` as you make changes, so they are the same in every browser on this computer. The previous version is kept as `data/portfolio.json.bak`. The `data` folder is not committed to Git.
