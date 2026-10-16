@@ -58,6 +58,7 @@ final class MarketStatusTest extends TestCase
         self::assertSame([
             'session' => $session,
             'name' => 'US market',
+            'timezone' => 'America/New_York',
             'nextChangeLabel' => $label,
             'nextChangeAt' => nyTime($nextChange),
             'nextSessionChangeAt' => nyTime($nextSessionChange),

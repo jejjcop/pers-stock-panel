@@ -62,6 +62,7 @@ function quotesResponse(tickers) {
         market: {
             session: 'open',
             name: 'US market',
+            timezone: 'America/New_York',
             nextChangeLabel: 'Closes',
             nextChangeAt: now + 2 * 3600 + 5 * 60,
             nextSessionChangeAt: now + 2 * 3600 + 5 * 60,

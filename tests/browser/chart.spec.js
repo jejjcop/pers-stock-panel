@@ -91,6 +91,24 @@ test.describe('the large chart', () => {
         expect(ticks).toEqual([700, 800, 900, 1000, 1100, 1200]);
     });
 
+    test('says yesterday when the one-day chart shows yesterday\'s session', async ({ page }) => {
+        await page.route('**/history.php?*', (route) => {
+            const now = Math.floor(Date.now() / 1000) - 86_400;
+            return route.fulfill({
+                json: {
+                    symbol: 'MU',
+                    range: '1d',
+                    currency: 'USD',
+                    previousClose: 1045.56,
+                    points: [[now - 7200, 1040], [now - 3600, 1060], [now, 1088]],
+                },
+            });
+        });
+        await openFromTicker(page, 'MU');
+
+        await expect(page.locator('#chart-dialog-change')).toHaveText('+$42.44 (+4.06%) yesterday');
+    });
+
     test('has no average cost line for stocks to monitor', async ({ page }) => {
         await openFromTicker(page, 'NVDA');
 

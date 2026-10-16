@@ -98,6 +98,56 @@ test.describe('the page', () => {
         });
     }
 
+    // The day total in the summary and the Day column in both tables are
+    // named after the trading day the prices come from.
+    test.describe('the day labels', () => {
+        const day = 86_400_000;
+
+        // Serves quotes whose latest regular-hours trade was the given time ago.
+        async function lastTradeAgo(page, ago) {
+            await page.route('**/quotes.php?*', (route) => {
+                const symbols = (new URL(route.request().url()).searchParams.get('symbols') ?? '').split(',');
+                const response = quotesResponse(symbols);
+                Object.values(response.quotes).forEach((quote) => {
+                    quote.marketTime -= ago / 1000;
+                });
+                return route.fulfill({ json: response });
+            });
+            await page.goto('/');
+            await expect(row(page, 'MU').locator('.quote-price')).toHaveText('$1,088.00');
+        }
+
+        test('say Today once today\'s trading has started', async ({ page }) => {
+            await lastTradeAgo(page, 0);
+
+            await expect(page.locator('.day-label')).toHaveText(['Today', 'Today', 'Today']);
+            await expect(page.locator('th.col-chart')).toHaveText(['Chart', 'Chart']);
+        });
+
+        test('say Yesterday before the market opens', async ({ page }) => {
+            await lastTradeAgo(page, day);
+
+            await expect(page.locator('.day-label')).toHaveText(['Yesterday', 'Yesterday', 'Yesterday']);
+        });
+
+        test('name the weekday when the prices are older, e.g. on a Monday morning', async ({ page }) => {
+            await lastTradeAgo(page, 3 * day);
+
+            const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'long' }).format(Date.now() - 3 * day);
+            await expect(page.locator('.day-label')).toHaveText([weekday, weekday, weekday]);
+        });
+
+        test('switch to Today with the first trade of the day', async ({ page, stream }) => {
+            await lastTradeAgo(page, day);
+            await expect(page.locator('#stream-status')).toHaveAttribute('data-state', 'live');
+            await expect(page.locator('.day-label').first()).toHaveText('Yesterday');
+
+            stream.send({ ticker: 'MU', price: 1100.5 });
+
+            await expect(page.locator('.day-label')).toHaveText(['Today', 'Today', 'Today']);
+        });
+    });
+
     test('shows a message instead of an empty table', async ({ page }) => {
         writePortfolio({ stocks: [{ ticker: 'MU', list: 'owned' }] });
         await page.goto('/');

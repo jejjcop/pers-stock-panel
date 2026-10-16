@@ -53,7 +53,7 @@ $pageData = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pers Stock Panel</title>
-    <link rel="stylesheet" href="styles.css?v=18">
+    <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body>
     <div class="page-shell">
@@ -137,7 +137,7 @@ $pageData = [
                                     <small id="portfolio-value-sek" class="sek-amount" hidden></small>
                                 </div>
                                 <div>
-                                    <span>Today</span>
+                                    <span class="day-label">Today</span>
                                     <strong id="portfolio-day">—</strong>
                                     <small id="portfolio-day-sek" class="sek-amount" hidden></small>
                                 </div>
@@ -165,8 +165,8 @@ $pageData = [
                                     <th>Price</th>
                                     <th class="holding-cell">Value</th>
                                     <th class="holding-cell">Gain / loss</th>
-                                    <th class="day-column" aria-sort="descending">Day <span aria-hidden="true">↓</span></th>
-                                    <th class="col-chart">Today</th>
+                                    <th class="day-column" aria-sort="descending"><span class="day-label">Today</span> <span aria-hidden="true">↓</span></th>
+                                    <th class="col-chart">Chart</th>
                                     <th>Week / Month</th>
                                     <th class="col-volume">Volume</th>
                                     <th><span class="visually-hidden">Actions</span></th>
@@ -233,6 +233,6 @@ $pageData = [
 
     <script id="portfolio-data" type="application/json"><?= json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) ?></script>
     <script src="price-stream.js?v=1"></script>
-    <script src="app.js?v=32"></script>
+    <script src="app.js?v=34"></script>
 </body>
 </html>

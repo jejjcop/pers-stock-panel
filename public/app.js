@@ -596,6 +596,9 @@ function applyStreamPrice(update) {
     const priceCell = row.querySelector('.quote-price');
     row.dataset.regularPrice = String(update.price);
     row.dataset.streamTime = String(update.time || Date.now());
+    // The first trade of a new day turns 'Yesterday' into 'Today'.
+    latestRegularTradeTime = Math.max(latestRegularTradeTime ?? 0, (update.time || Date.now()) / 1000);
+    renderDayLabels();
     priceCell.textContent = formatPrice(update.price, currency);
 
     const previousClose = row.dataset.previousClose ? Number(row.dataset.previousClose) : NaN;
@@ -973,6 +976,46 @@ const chartDialogTooltip = document.getElementById('chart-dialog-tooltip');
 const chartDialogStatus = document.getElementById('chart-dialog-status');
 const rangeButtons = Array.from(chartDialog.querySelectorAll('[data-range]'));
 const rangeDescriptions = { '1d': 'today', '1w': 'past week', '1m': 'past month', '1y': 'past year', '5y': 'past 5 years' };
+
+// 'Today', 'Yesterday' or the weekday (e.g. 'Friday') of the trading day a
+// timestamp (in seconds) belongs to, counted in the exchange's time zone.
+// Before the market opens, prices and charts are still the previous
+// session's, which over a weekend is Friday's.
+function sessionDayName(timestamp) {
+    const timeZone = marketState?.timezone;
+    if (!Number.isFinite(timestamp) || typeof timeZone !== 'string') {
+        return 'Today';
+    }
+
+    let dayOf;
+    try {
+        const format = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+        dayOf = (milliseconds) => format.format(milliseconds);
+    } catch (error) {
+        return 'Today';
+    }
+    const sessionDay = dayOf(timestamp * 1000);
+    if (sessionDay === dayOf(Date.now())) {
+        return 'Today';
+    }
+    if (sessionDay === dayOf(Date.now() - 86_400_000)) {
+        return 'Yesterday';
+    }
+    return new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'long' }).format(timestamp * 1000);
+}
+
+// When the latest regular-hours trade happened (seconds). Until the market
+// opens, prices, the Day column and the day totals are yesterday's.
+let latestRegularTradeTime = null;
+
+// Names the Day column and the day total after the trading day the prices
+// come from: 'Today', or 'Yesterday' / 'Friday' before the market opens.
+function renderDayLabels() {
+    const name = sessionDayName(latestRegularTradeTime);
+    document.querySelectorAll('.day-label').forEach((label) => {
+        label.textContent = name;
+    });
+}
 // Room on the left for price labels and on the right for line labels.
 const largeChart = { width: 900, height: 360, left: 76, right: 150, top: 16, bottom: 34 };
 let largeChartTicker = null;
@@ -1097,6 +1140,12 @@ function drawLargeChart(points, previousClose, currency, range) {
         ? holding.cost
         : null;
 
+    // e.g. 'today', 'yesterday' or 'on Friday' for the one-day chart.
+    const dayName = sessionDayName(points[points.length - 1][0]);
+    const periodDescription = range !== '1d'
+        ? rangeDescriptions[range]
+        : ['Today', 'Yesterday'].includes(dayName) ? dayName.toLowerCase() : `on ${dayName}`;
+
     const references = [previousClose, averageCost].filter(Number.isFinite);
     const { ticks, step } = niceTicks(Math.min(...prices, ...references), Math.max(...prices, ...references), 5);
     const low = ticks[0];
@@ -1116,7 +1165,7 @@ function drawLargeChart(points, previousClose, currency, range) {
         class: `large-chart ${trend}`,
         viewBox: `0 0 ${width} ${height}`,
         role: 'img',
-        'aria-label': `${largeChartTicker} ${rangeDescriptions[range]}: from ${formatPrice(prices[0], currency)} to ${formatPrice(lastPrice, currency)}`,
+        'aria-label': `${largeChartTicker} ${periodDescription}: from ${formatPrice(prices[0], currency)} to ${formatPrice(lastPrice, currency)}`,
     });
 
     ticks.forEach((tick) => {
@@ -1187,7 +1236,7 @@ function drawLargeChart(points, previousClose, currency, range) {
     });
 
     chartDialogPlot.prepend(svg);
-    chartDialogChange.textContent = `${describeChange(lastPrice - baseline, baseline, currency)} ${rangeDescriptions[range]}`;
+    chartDialogChange.textContent = `${describeChange(lastPrice - baseline, baseline, currency)} ${periodDescription}`;
     chartDialogChange.className = `chart-dialog-change trend ${trend}`;
 }
 
@@ -1308,6 +1357,12 @@ async function refreshQuotes() {
                 renderSparkline(row, quote.intraday, previousClose, currency);
             }
         });
+        Object.values(result.quotes || {}).forEach((quote) => {
+            if (Number.isFinite(quote.marketTime)) {
+                latestRegularTradeTime = Math.max(latestRegularTradeTime ?? 0, quote.marketTime);
+            }
+        });
+        renderDayLabels();
 
         const failures = Object.keys(result.errors || {});
         const extendedFailures = Object.keys(result.extendedErrors || {});

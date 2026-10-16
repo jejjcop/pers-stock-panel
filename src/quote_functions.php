@@ -217,6 +217,8 @@ function marketStatus(array $periods, string $timezone, string $exchange, int $n
     return [
         'session' => $session,
         'name' => $timezone === 'America/New_York' ? 'US market' : trim($exchange . ' market'),
+        // The exchange's time zone, so the page can tell which day a chart shows.
+        'timezone' => $timezone,
         'nextChangeLabel' => $nextChangeLabel,
         'nextChangeAt' => $nextChangeAt,
         'nextSessionChangeAt' => $nextSessionChangeAt,

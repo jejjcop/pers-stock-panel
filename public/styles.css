@@ -406,13 +406,14 @@ th.day-column {
     animation: flash-down 1s ease-out;
 }
 
+/* The price turns white at the start so it stays readable on the colour. */
 @keyframes flash-up {
-    from { background: rgba(52, 211, 153, 0.35); }
+    from { background: rgba(74, 222, 128, 0.7); color: #ffffff; }
     to { background: transparent; }
 }
 
 @keyframes flash-down {
-    from { background: rgba(248, 113, 113, 0.35); }
+    from { background: rgba(255, 82, 82, 0.7); color: #ffffff; }
     to { background: transparent; }
 }
 
