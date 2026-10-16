@@ -16,6 +16,10 @@ npm run test:browser   # browser tests (Playwright)
 - A Stop hook (`.claude/settings.json`, `.claude/hooks/run-tests.js`) also runs both suites when code changed since the last passing run. It is a safety net, not a replacement for running the tests yourself.
 - If Node, Composer or Git are not found, the tools are installed but the session's PATH may be stale: Node is in `C:\Program Files\nodejs`, Composer in `%LOCALAPPDATA%\Programs\Composer`, Git in `C:\Program Files\Git\cmd`.
 
+## Deployment
+
+The user's everyday app on http://127.0.0.1:8080 is an installed copy in `%LOCALAPPDATA%\PersStockPanel\app`, kept up to date from GitHub by scheduled tasks (`deploy/`, see README). Changes in this folder reach it only after commit, push and passing tests on GitHub (within 15 minutes; `Start-ScheduledTask 'Pers Stock Panel - update'` to update at once). Never edit the installed copy directly, and use other ports (not 8080) for manual checks.
+
 ## Rules
 
 - Never read, write or delete `data/portfolio.json` (the user's real holdings) in tests or experiments. The browser tests use `STOCK_PANEL_DATA_DIR`; for manual checks, run a copy of the app on another port with that variable set.

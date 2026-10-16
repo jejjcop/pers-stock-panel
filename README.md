@@ -30,6 +30,24 @@ php -S 127.0.0.1:8080 -t public
 
 Then open http://127.0.0.1:8080 in your browser.
 
+## Automatic updates on this PC (continuous deployment)
+
+The app you use day to day runs from an installed copy in `%LOCALAPPDATA%\PersStockPanel\app`, not from this working folder, so unfinished changes here never reach it. Two Windows scheduled tasks look after it:
+
+- **Pers Stock Panel - server** starts the app on http://127.0.0.1:8080 when you log in, without a window.
+- **Pers Stock Panel - update** checks GitHub every 15 minutes and installs a new version once its tests have passed on GitHub Actions. Versions whose tests fail are skipped.
+
+The installed copy uses this project's `data` folder for `portfolio.json`, so OneDrive keeps backing it up.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\install.ps1     # set up (again)
+Start-ScheduledTask 'Pers Stock Panel - update'                 # update now instead of waiting
+Get-Content "$env:LOCALAPPDATA\PersStockPanel\deploy.log" -Tail 20   # what happened
+powershell -ExecutionPolicy Bypass -File deploy\uninstall.ps1   # remove the tasks
+```
+
+So a change goes: edit here → tests → commit → push → tests on GitHub → installed within 15 minutes → reload the page.
+
 ## Your data
 
 Your stock lists, shares and average costs are saved to `data/portfolio.json` as you make changes, so they are the same in every browser on this computer. The previous version is kept as `data/portfolio.json.bak`. The `data` folder is not committed to Git.
