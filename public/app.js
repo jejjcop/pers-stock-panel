@@ -100,6 +100,16 @@ function scheduleNextRefresh() {
     updateRefreshCountdown();
 }
 
+// When the login has run out (or ended in another tab), the server answers
+// 401: go to the login page, which says why.
+function sendToLoginIfLoggedOut(response) {
+    if (response.status !== 401) {
+        return false;
+    }
+    window.location.assign('login.php?expired=1');
+    return true;
+}
+
 function allRows() {
     return stockBodies.flatMap((body) => Array.from(body.querySelectorAll('tr')));
 }
@@ -181,6 +191,9 @@ async function savePortfolio() {
             body: JSON.stringify(portfolioState()),
             cache: 'no-store',
         });
+        if (sendToLoginIfLoggedOut(response)) {
+            return;
+        }
         let result = {};
         try {
             result = await response.json();
@@ -1044,6 +1057,9 @@ async function loadLargeChart(range) {
             headers: { Accept: 'application/json' },
             cache: 'no-store',
         });
+        if (sendToLoginIfLoggedOut(response)) {
+            return;
+        }
         let result = {};
         try {
             result = await response.json();
@@ -1304,6 +1320,9 @@ async function refreshQuotes() {
             headers: { Accept: 'application/json' },
             cache: 'no-store',
         });
+        if (sendToLoginIfLoggedOut(response)) {
+            return;
+        }
         const responseBody = await response.text();
         let result;
         try {

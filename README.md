@@ -50,6 +50,16 @@ So a change goes: edit here → tests → commit → push → tests on GitHub �
 
 If the page does not change after a push, check the log: it says when a version is still being tested, failed its tests, or could not be fetched (with git's or GitHub's own message).
 
+## Logging in
+
+The app is protected by a password. The first visit asks you to choose one; that is only allowed from the computer the app runs on (`127.0.0.1`), so nobody else can claim a freshly installed copy. The password is stored as a hash in `auth.json` next to `portfolio.json`, never in Git.
+
+- A login lasts 30 days in the same browser and is extended every time you use the app. **Log out** ends it.
+- After 5 wrong passwords in a row, logging in pauses for 30 seconds, then for longer each time (up to 15 minutes).
+- The page and every endpoint (`data.php`, `quotes.php`, `history.php`) refuse requests without a login. An open page whose login has run out goes to the login page.
+- Over HTTPS (e.g. on a web host) the login cookie is only ever sent encrypted. The app itself does not provide HTTPS; a web host or a proxy in front of it does.
+- Forgot the password? Delete `data/auth.json` and open the app on this computer to choose a new one. Your stocks are not affected.
+
 ## Your data
 
 Your stock lists, shares and average costs are saved to `data/portfolio.json` as you make changes, so they are the same in every browser on this computer. The previous version is kept as `data/portfolio.json.bak`. The `data` folder is not committed to Git.

@@ -26,6 +26,9 @@ function respond(int $status, array $payload): void
 }
 
 require_once __DIR__ . '/../src/quote_functions.php';
+require_once __DIR__ . '/../src/auth.php';
+
+requireLoginForApi();
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
     header('Allow: GET');

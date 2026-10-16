@@ -12,6 +12,9 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 require_once __DIR__ . '/../src/quote_functions.php';
 require_once __DIR__ . '/../src/portfolio.php';
+require_once __DIR__ . '/../src/auth.php';
+
+requireLoginForApi();
 
 function respondJson(int $status, array $payload): never
 {

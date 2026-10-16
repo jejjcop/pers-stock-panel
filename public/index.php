@@ -3,8 +3,15 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../src/portfolio.php';
+require_once __DIR__ . '/../src/auth.php';
 
 use StockPanel\StockPanel;
+
+if (!isLoggedIn()) {
+    header('Location: login.php', true, 303);
+    exit;
+}
+session_write_close();
 
 $portfolioPath = portfolioPath();
 $portfolio = loadPortfolio($portfolioPath);
@@ -53,7 +60,7 @@ $pageData = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pers Stock Panel</title>
-    <link rel="stylesheet" href="styles.css?v=19">
+    <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
     <div class="page-shell">
@@ -71,6 +78,9 @@ $pageData = [
                     </span>
                 </div>
                 <button id="refresh-quotes" class="primary-button" type="button">Refresh prices</button>
+                <form method="post" action="logout.php">
+                    <button class="secondary-button" type="submit">Log out</button>
+                </form>
             </div>
         </header>
 
@@ -233,6 +243,6 @@ $pageData = [
 
     <script id="portfolio-data" type="application/json"><?= json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) ?></script>
     <script src="price-stream.js?v=1"></script>
-    <script src="app.js?v=34"></script>
+    <script src="app.js?v=35"></script>
 </body>
 </html>

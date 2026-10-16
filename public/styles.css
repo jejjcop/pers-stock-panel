@@ -837,6 +837,55 @@ th.day-column {
     background: rgba(248, 113, 113, 0.2);
 }
 
+.topbar-actions form {
+    margin: 0;
+}
+
+.login-shell {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: 32px 16px;
+}
+
+.login-panel {
+    width: min(420px, 100%);
+}
+
+.login-title {
+    margin-bottom: 12px;
+    font-size: 1.6rem;
+}
+
+.login-intro {
+    margin-bottom: 18px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.login-message {
+    margin-bottom: 16px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.login-message.is-error {
+    color: var(--danger);
+}
+
+.login-form {
+    display: grid;
+    gap: 16px;
+}
+
+.login-form .search-box input {
+    width: 100%;
+}
+
+.login-form .primary-button {
+    justify-self: start;
+}
+
 .confirm-dialog {
     width: min(420px, calc(100vw - 32px));
     padding: 24px;

@@ -95,12 +95,36 @@ function historyResponse(symbol, range) {
 }
 
 /** Replaces the data file with these stocks and holdings, or removes it when null. */
-function writePortfolio(portfolio) {
+// The password the tests log in with, and its hash as PHP's password_hash()
+// made it.
+const testPassword = 'test-password-123';
+const testPasswordHash = '$2y$12$6AyoucMaW.Bdiea6q8dWXu5kXsr4cyb8n8mDvVfVrdELHSf8Nnnoe';
+const authFile = path.join(dataDir, 'auth.json');
+
+/**
+ * Replaces the data file with these stocks and holdings, or removes it when
+ * null. The test password is set up again too, unless withPassword is false.
+ */
+function writePortfolio(portfolio, { withPassword = true } = {}) {
     fs.rmSync(dataDir, { recursive: true, force: true });
     fs.mkdirSync(dataDir, { recursive: true });
     if (portfolio !== null) {
         fs.writeFileSync(dataFile, JSON.stringify({ holdings: {}, ...portfolio }, null, 2));
     }
+    if (withPassword) {
+        fs.writeFileSync(authFile, JSON.stringify({ passwordHash: testPasswordHash, failedAttempts: 0, lockedUntil: 0 }));
+    }
+}
+
+/** What auth.json holds, or null when there is none. */
+function readAuth() {
+    return fs.existsSync(authFile) ? JSON.parse(fs.readFileSync(authFile, 'utf8')) : null;
+}
+
+/** Logs a page or a whole browser context in with the test password. */
+async function logIn(target) {
+    const response = await target.request.post('/login.php', { form: { password: testPassword }, maxRedirects: 0 });
+    base.expect(response.status(), 'logging in with the test password').toBe(303);
 }
 
 /** What the page last saved, or null when there is no data file. */
@@ -217,10 +241,12 @@ async function stubYahoo(target, stream) {
  */
 const test = base.test.extend({
     expectedConsoleErrors: [/** @type {RegExp[]} */ ([]), { option: true }],
+    // Whether each test starts logged in; the login tests turn this off.
+    loggedIn: [true, { option: true }],
     stream: async ({}, use) => {
         await use(createStream());
     },
-    page: async ({ page, expectedConsoleErrors, stream }, use) => {
+    page: async ({ page, expectedConsoleErrors, stream, loggedIn }, use) => {
         const errors = [];
         page.on('pageerror', (error) => errors.push(error.message));
         page.on('console', (message) => {
@@ -230,6 +256,9 @@ const test = base.test.extend({
             }
         });
         await stubYahoo(page, stream);
+        if (loggedIn) {
+            await logIn(page);
+        }
 
         await use(page);
 
@@ -258,6 +287,9 @@ async function addStock(page, ticker, list) {
 module.exports = {
     test,
     expect: base.expect,
+    testPassword,
+    readAuth,
+    logIn,
     quotesResponse,
     createStream,
     stubYahoo,
