@@ -123,6 +123,22 @@ test.describe("today's graphs", () => {
         await expect(page.locator('#live-charts-panel')).toBeHidden();
     });
 
+    for (const [width, perRow] of [[1920, 3], [1000, 2], [390, 1]]) {
+        test(`puts ${perRow} graph(s) in each row on a ${width}px wide window`, async ({ page }) => {
+            writePortfolio({
+                stocks: ['MU', 'AAPL', 'MSFT', 'NVDA', 'AMZN'].map((ticker) => ({ ticker, list: 'owned' })),
+            });
+            await page.setViewportSize({ width, height: 900 });
+            await openWithPrices(page);
+
+            // How many cards share the first card's row.
+            const tops = await page.locator('.live-chart-card').evaluateAll(
+                (cards) => cards.map((element) => Math.round(element.getBoundingClientRect().top))
+            );
+            expect(tops.filter((top) => top === tops[0])).toHaveLength(perRow);
+        });
+    }
+
     test('opens the large chart from a graph', async ({ page }) => {
         await openWithPrices(page);
 
