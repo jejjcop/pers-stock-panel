@@ -98,8 +98,8 @@ test.describe('the page', () => {
         });
     }
 
-    // The day total in the summary and the Day column in both tables are
-    // named after the trading day the prices come from.
+    // The day total in the summary, the Day column in both tables and the
+    // heading of the graphs are named after the trading day the prices come from.
     test.describe('the day labels', () => {
         const day = 86_400_000;
 
@@ -120,21 +120,21 @@ test.describe('the page', () => {
         test('say Today once today\'s trading has started', async ({ page }) => {
             await lastTradeAgo(page, 0);
 
-            await expect(page.locator('.day-label')).toHaveText(['Today', 'Today', 'Today']);
+            await expect(page.locator('.day-label')).toHaveText(['Today', 'Today', 'Today', 'Today']);
             await expect(page.locator('th.col-chart')).toHaveText(['Chart', 'Chart']);
         });
 
         test('say Yesterday before the market opens', async ({ page }) => {
             await lastTradeAgo(page, day);
 
-            await expect(page.locator('.day-label')).toHaveText(['Yesterday', 'Yesterday', 'Yesterday']);
+            await expect(page.locator('.day-label')).toHaveText(['Yesterday', 'Yesterday', 'Yesterday', 'Yesterday']);
         });
 
         test('name the weekday when the prices are older, e.g. on a Monday morning', async ({ page }) => {
             await lastTradeAgo(page, 3 * day);
 
             const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'long' }).format(Date.now() - 3 * day);
-            await expect(page.locator('.day-label')).toHaveText([weekday, weekday, weekday]);
+            await expect(page.locator('.day-label')).toHaveText([weekday, weekday, weekday, weekday]);
         });
 
         test('switch to Today with the first trade of the day', async ({ page, stream }) => {
@@ -144,7 +144,7 @@ test.describe('the page', () => {
 
             stream.send({ ticker: 'MU', price: 1100.5 });
 
-            await expect(page.locator('.day-label')).toHaveText(['Today', 'Today', 'Today']);
+            await expect(page.locator('.day-label')).toHaveText(['Today', 'Today', 'Today', 'Today']);
         });
     });
 

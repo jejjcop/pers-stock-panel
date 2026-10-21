@@ -128,6 +128,7 @@ function updateEmptyStates() {
         document.getElementById(`${body.dataset.list}-empty`).hidden = !isEmpty;
         body.closest('.table-wrap').hidden = isEmpty;
     });
+    syncLiveCharts();
 }
 
 function nonNegativeNumber(value) {
@@ -629,6 +630,7 @@ function applyStreamPrice(update) {
     if (Number.isFinite(previousPrice) && update.price !== previousPrice) {
         flashPrice(priceCell, update.price > previousPrice);
     }
+    addLiveChartTrade(update.ticker, update.time || Date.now(), update.price);
     scheduleStreamRender();
 }
 
@@ -978,6 +980,353 @@ function hideChartHover(event) {
     chartTooltip.hidden = true;
 }
 
+// Today's graphs: one card per stock in My current stocks, drawn across the
+// whole regular session and moved along by every live trade.
+const liveChartsPanel = document.getElementById('live-charts-panel');
+const liveChartsList = document.getElementById('live-charts');
+// Room on the right for price labels and at the bottom for times. The graph
+// is drawn at its size on screen, so the text stays the same size; this
+// width is only used before the card is laid out.
+const liveChart = { width: 560, left: 2, right: 64, top: 12, bottom: 26 };
+// Trades from the stream are kept one per this many seconds until the next
+// refresh brings the day's points from Yahoo.
+const liveTradeBucketSeconds = 10;
+const liveCharts = new Map();
+// Every stock's points and trading hours from the last refresh, so a stock
+// moved into My current stocks gets its graph without waiting for the next.
+const dayCharts = new Map();
+let liveChartCount = 0;
+
+// Gives each stock in My current stocks a card, in the same order as the
+// table, and removes the cards of stocks that left it.
+function syncLiveCharts() {
+    const tickers = Array.from(bodyFor('owned').rows, (row) => row.dataset.ticker);
+    liveCharts.forEach((chart, ticker) => {
+        if (!tickers.includes(ticker)) {
+            chart.card.remove();
+            liveCharts.delete(ticker);
+        }
+    });
+    tickers.forEach((ticker) => {
+        if (!liveCharts.has(ticker)) {
+            liveCharts.set(ticker, createLiveChart(ticker));
+            const saved = dayCharts.get(ticker);
+            if (saved) {
+                setLiveChartData(ticker, saved.points, saved.session);
+            }
+        }
+    });
+
+    const cards = tickers.map((ticker) => liveCharts.get(ticker).card);
+    if (cards.some((card, index) => liveChartsList.children[index] !== card)) {
+        liveChartsList.append(...cards);
+    }
+    liveChartsPanel.hidden = cards.length === 0;
+}
+
+function createLiveChart(ticker) {
+    const card = document.createElement('article');
+    card.className = 'live-chart-card';
+    card.dataset.ticker = ticker;
+
+    const titles = document.createElement('div');
+    titles.className = 'live-chart-titles';
+    const tickerButton = createButton('ticker-button live-chart-ticker', 'chart', ticker);
+    tickerButton.title = `Open a larger chart of ${ticker}`;
+    const name = createSpan('live-chart-name', '');
+    titles.append(tickerButton, name);
+
+    const quote = document.createElement('div');
+    quote.className = 'live-chart-quote';
+    const price = createSpan('live-chart-price');
+    const change = createSpan('live-chart-change');
+    const when = createSpan('live-chart-when', '');
+    quote.append(price, change, when);
+
+    const header = document.createElement('div');
+    header.className = 'live-chart-header';
+    header.append(titles, quote);
+
+    const plot = document.createElement('div');
+    plot.className = 'live-chart-plot';
+    plot.append(createSpan('live-chart-empty', 'Loading...'));
+    card.append(header, plot);
+
+    liveChartCount += 1;
+    const chart = {
+        ticker,
+        card,
+        name,
+        price,
+        change,
+        when,
+        plot,
+        gradientId: `live-chart-fill-${liveChartCount}`,
+        // The day's points from the last refresh, and trades since then.
+        points: [],
+        livePoints: [],
+        session: null,
+        // What was last drawn, for pointing at the graph.
+        drawn: null,
+        pointerX: null,
+        frame: null,
+    };
+    plot.addEventListener('pointermove', (event) => {
+        chart.pointerX = event.clientX;
+        showLiveChartHover(chart);
+    });
+    plot.addEventListener('pointerleave', () => {
+        chart.pointerX = null;
+        showLiveChartHover(chart);
+    });
+    return chart;
+}
+
+// The day's points and trading hours from a refresh. Trades from the stream
+// that are newer than its last point stay on the graph.
+function setLiveChartData(ticker, points, session) {
+    dayCharts.set(ticker, { points, session });
+    const chart = liveCharts.get(ticker);
+    if (!chart) {
+        return;
+    }
+
+    chart.points = Array.isArray(points)
+        ? points.filter((point) => Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]))
+        : [];
+    chart.session = Array.isArray(session) && session.length === 2 && session.every(Number.isFinite) && session[1] > session[0]
+        ? session
+        : null;
+    const lastTime = chart.points.length > 0 ? chart.points[chart.points.length - 1][0] : -Infinity;
+    chart.livePoints = chart.livePoints.filter(([time]) => time > lastTime);
+    scheduleLiveChartDraw(chart);
+}
+
+// A regular-hours trade from the stream: the end of the line moves to it.
+function addLiveChartTrade(ticker, timeMs, price) {
+    const chart = liveCharts.get(ticker);
+    if (!chart) {
+        return;
+    }
+
+    const time = timeMs / 1000;
+    const all = [...chart.points, ...chart.livePoints];
+    const lastTime = all.length > 0 ? all[all.length - 1][0] : -Infinity;
+    const inSession = !chart.session || (time >= chart.session[0] && time < chart.session[1]);
+    // A trade from another day (before the next refresh brings its hours),
+    // or one that arrives after a newer one, only updates the price above.
+    if (inSession && time >= lastTime) {
+        const last = chart.livePoints[chart.livePoints.length - 1];
+        if (last && Math.floor(last[0] / liveTradeBucketSeconds) === Math.floor(time / liveTradeBucketSeconds)) {
+            chart.livePoints[chart.livePoints.length - 1] = [time, price];
+        } else {
+            chart.livePoints.push([time, price]);
+        }
+    }
+    scheduleLiveChartDraw(chart);
+}
+
+// Draws at most once per frame, however many trades arrive.
+function scheduleLiveChartDraw(chart) {
+    if (chart.frame !== null) {
+        return;
+    }
+    chart.frame = window.requestAnimationFrame(() => {
+        chart.frame = null;
+        if (liveCharts.get(chart.ticker) === chart) {
+            drawLiveChart(chart);
+        }
+    });
+}
+
+function liveChartContext(chart) {
+    const row = findRow(chart.ticker);
+    const previousClose = row?.dataset.previousClose ? Number(row.dataset.previousClose) : NaN;
+    return {
+        currency: row?.dataset.currency || 'USD',
+        previousClose: Number.isFinite(previousClose) ? previousClose : null,
+        price: row ? rowPrice(row) : NaN,
+        name: row?.querySelector('.quote-name')?.textContent ?? '',
+    };
+}
+
+// The price, change and time above the graph: the latest price, or the
+// price at the point being pointed at.
+function renderLiveChartQuote(chart, point) {
+    const { currency, previousClose, price: latestPrice } = liveChartContext(chart);
+    const price = point ? point[1] : latestPrice;
+    chart.price.textContent = Number.isFinite(price) ? formatPrice(price, currency) : '—';
+
+    if (Number.isFinite(price) && previousClose !== null) {
+        const change = price - previousClose;
+        chart.change.textContent = describeChange(change, previousClose, currency);
+        chart.change.className = `live-chart-change trend ${change > 0 ? 'up' : change < 0 ? 'down' : ''}`;
+    } else {
+        chart.change.textContent = '';
+        chart.change.className = 'live-chart-change';
+    }
+
+    if (point) {
+        chart.when.textContent = `at ${new Date(point[0] * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } else {
+        const points = [...chart.points, ...chart.livePoints];
+        const lastTime = points.length > 0 ? points[points.length - 1][0] : latestRegularTradeTime;
+        chart.when.textContent = sessionDayName(lastTime);
+    }
+}
+
+// Full hours across the session, e.g. 16:00, 18:00, 20:00, 22:00, in the
+// browser's time zone like the rest of the page.
+function liveChartTimeTicks(start, end) {
+    const hours = (end - start) / 3600;
+    const step = hours > 8 ? 3 : hours > 4 ? 2 : 1;
+    const ticks = [];
+    const date = new Date(start * 1000);
+    date.setMinutes(0, 0, 0);
+    while (date.getTime() / 1000 <= end) {
+        const time = date.getTime() / 1000;
+        if (time >= start && date.getHours() % step === 0) {
+            ticks.push(time);
+        }
+        date.setHours(date.getHours() + 1);
+    }
+    return ticks.length > 0 ? ticks : [start, end];
+}
+
+function drawLiveChart(chart) {
+    const { currency, previousClose, name } = liveChartContext(chart);
+    chart.name.textContent = name === '—' ? '' : name;
+    chart.name.title = chart.name.textContent;
+
+    const points = [...chart.points, ...chart.livePoints];
+    if (points.length < 2) {
+        chart.drawn = null;
+        chart.card.classList.remove('up', 'down');
+        chart.plot.replaceChildren(createSpan('live-chart-empty', 'No trades yet today.'));
+        renderLiveChartQuote(chart, null);
+        return;
+    }
+
+    const { left, right, top, bottom } = liveChart;
+    const width = Math.round(chart.plot.clientWidth) || liveChart.width;
+    const height = Math.round(chart.plot.clientHeight) || 200;
+    const plotRight = width - right;
+    const plotBottom = height - bottom;
+    const prices = points.map((point) => point[1]);
+    const lastPoint = points[points.length - 1];
+    const baseline = previousClose ?? prices[0];
+    const trend = lastPoint[1] > baseline ? 'up' : lastPoint[1] < baseline ? 'down' : 'flat';
+    chart.card.classList.toggle('up', trend === 'up');
+    chart.card.classList.toggle('down', trend === 'down');
+
+    const references = previousClose !== null ? [previousClose] : [];
+    const { ticks, step } = niceTicks(Math.min(...prices, ...references), Math.max(...prices, ...references), 4);
+    const low = ticks[0];
+    const high = ticks[ticks.length - 1];
+    // The whole session, so the line fills in from left to right as the day goes on.
+    const start = chart.session ? Math.min(chart.session[0], points[0][0]) : points[0][0];
+    const end = chart.session ? Math.max(chart.session[1], lastPoint[0]) : lastPoint[0];
+    const x = (time) => left + ((time - start) / (end - start)) * (plotRight - left);
+    const y = (price) => top + (1 - (price - low) / (high - low)) * (plotBottom - top);
+    const axisPrice = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: step < 1 ? 2 : 0,
+        maximumFractionDigits: step < 1 ? 2 : 0,
+    });
+
+    const svg = createSvgElement('svg', {
+        class: `live-chart ${trend}`,
+        viewBox: `0 0 ${width} ${height}`,
+        role: 'img',
+        'aria-label': `${chart.ticker} ${sessionDayName(lastPoint[0]).toLowerCase()}: from ${formatPrice(prices[0], currency)} to ${formatPrice(lastPoint[1], currency)}`,
+    });
+
+    const gradient = createSvgElement('linearGradient', { id: chart.gradientId, x1: 0, y1: 0, x2: 0, y2: 1 });
+    gradient.append(
+        createSvgElement('stop', { class: 'live-chart-fill-top', offset: 0 }),
+        createSvgElement('stop', { class: 'live-chart-fill-bottom', offset: 1 }),
+    );
+    const defs = createSvgElement('defs', {});
+    defs.append(gradient);
+    svg.append(defs);
+
+    ticks.forEach((tick) => {
+        svg.append(createSvgElement('line', { class: 'live-chart-grid', x1: left, x2: plotRight, y1: y(tick), y2: y(tick) }));
+        const label = createSvgElement('text', { class: 'live-chart-axis', x: plotRight + 8, y: y(tick), 'dominant-baseline': 'middle' });
+        label.textContent = axisPrice.format(tick);
+        svg.append(label);
+    });
+
+    liveChartTimeTicks(start, end).forEach((time) => {
+        const position = x(time);
+        const anchor = position - left < 24 ? 'start' : plotRight - position < 24 ? 'end' : 'middle';
+        const label = createSvgElement('text', { class: 'live-chart-axis', x: position, y: height - 6, 'text-anchor': anchor });
+        label.textContent = new Date(time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        svg.append(label);
+    });
+
+    const linePath = points.map(([time, price], index) => `${index === 0 ? 'M' : 'L'}${x(time).toFixed(1)},${y(price).toFixed(1)}`).join(' ');
+    const areaPath = `${linePath} L${x(lastPoint[0]).toFixed(1)},${plotBottom} L${x(points[0][0]).toFixed(1)},${plotBottom} Z`;
+    svg.append(createSvgElement('path', { class: 'live-chart-area', d: areaPath, fill: `url(#${chart.gradientId})` }));
+
+    if (previousClose !== null) {
+        svg.append(createSvgElement('line', { class: 'live-chart-previous-close', x1: left, x2: plotRight, y1: y(previousClose), y2: y(previousClose) }));
+    }
+
+    svg.append(createSvgElement('path', { class: 'live-chart-line', d: linePath }));
+
+    // The newest price, pulsing while the session is still going.
+    const sessionOngoing = chart.session !== null && Date.now() / 1000 < chart.session[1];
+    const lastX = x(lastPoint[0]);
+    const lastY = y(lastPoint[1]);
+    if (sessionOngoing) {
+        svg.append(createSvgElement('circle', { class: 'live-chart-pulse', cx: lastX, cy: lastY, r: 4 }));
+    }
+    svg.append(createSvgElement('circle', { class: 'live-chart-last', cx: lastX, cy: lastY, r: 4 }));
+
+    const hoverLine = createSvgElement('line', { class: 'live-chart-hover-line', y1: top, y2: plotBottom, visibility: 'hidden' });
+    const hoverDot = createSvgElement('circle', { class: 'live-chart-hover-dot', r: 4, visibility: 'hidden' });
+    svg.append(hoverLine, hoverDot);
+
+    chart.plot.replaceChildren(svg);
+    chart.drawn = { svg, width, points, x, y, start, end, hoverLine, hoverDot };
+    showLiveChartHover(chart);
+}
+
+// While the pointer is over a graph, marks the nearest point and shows its
+// price and time above it; otherwise shows the latest price.
+function showLiveChartHover(chart) {
+    const drawn = chart.drawn;
+    if (!drawn || chart.pointerX === null) {
+        drawn?.hoverLine.setAttribute('visibility', 'hidden');
+        drawn?.hoverDot.setAttribute('visibility', 'hidden');
+        renderLiveChartQuote(chart, null);
+        return;
+    }
+
+    const { left, right } = liveChart;
+    const { width } = drawn;
+    const bounds = drawn.svg.getBoundingClientRect();
+    const pointerX = ((chart.pointerX - bounds.left) / bounds.width) * width;
+    const time = drawn.start + ((pointerX - left) / (width - right - left)) * (drawn.end - drawn.start);
+    let nearest = drawn.points[0];
+    drawn.points.forEach((point) => {
+        if (Math.abs(point[0] - time) < Math.abs(nearest[0] - time)) {
+            nearest = point;
+        }
+    });
+
+    const pointX = drawn.x(nearest[0]);
+    drawn.hoverLine.setAttribute('x1', pointX);
+    drawn.hoverLine.setAttribute('x2', pointX);
+    drawn.hoverDot.setAttribute('cx', pointX);
+    drawn.hoverDot.setAttribute('cy', drawn.y(nearest[1]));
+    drawn.hoverLine.setAttribute('visibility', 'visible');
+    drawn.hoverDot.setAttribute('visibility', 'visible');
+    renderLiveChartQuote(chart, nearest);
+}
+
 // The large chart: price history for one stock over a chosen period, opened
 // by clicking a stock's ticker or small chart.
 const chartDialog = document.getElementById('chart-dialog');
@@ -1280,6 +1629,7 @@ function sortRowsByDayChange() {
             body.append(...sorted);
         }
     });
+    syncLiveCharts();
 }
 
 function renderPercentChange(cell, changePct) {
@@ -1374,8 +1724,11 @@ async function refreshQuotes() {
                 const previousClose = row.dataset.previousClose ? Number(row.dataset.previousClose) : NaN;
                 renderExtendedQuote(row, quote, currency);
                 renderSparkline(row, quote.intraday, previousClose, currency);
+                setLiveChartData(ticker, quote.intraday, quote.regularSession);
             }
         });
+        // Also the graphs without new points, for their price and name.
+        liveCharts.forEach(scheduleLiveChartDraw);
         Object.values(result.quotes || {}).forEach((quote) => {
             if (Number.isFinite(quote.marketTime)) {
                 latestRegularTradeTime = Math.max(latestRegularTradeTime ?? 0, quote.marketTime);
@@ -1679,6 +2032,20 @@ window.addEventListener('pagehide', () => {
         body: JSON.stringify(portfolioState()),
         keepalive: true,
     });
+});
+
+// Redraws the graphs at their new size when the window changes width.
+new ResizeObserver(() => liveCharts.forEach((chart) => {
+    if (chart.drawn && Math.round(chart.plot.clientWidth) !== chart.drawn.width) {
+        scheduleLiveChartDraw(chart);
+    }
+})).observe(liveChartsList);
+
+liveChartsList.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target.closest('button[data-action="chart"]') : null;
+    if (button) {
+        openLargeChart(button.closest('.live-chart-card').dataset.ticker);
+    }
 });
 
 rangeButtons.forEach((button) => button.addEventListener('click', () => loadLargeChart(button.dataset.range)));

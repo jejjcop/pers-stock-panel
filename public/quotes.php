@@ -199,6 +199,9 @@ foreach ($symbols as $symbol) {
         'afterHours' => latestSessionQuote($minuteTimestamps, $minuteCloses, $periods['post'] ?? null),
         'activeSession' => activeExtendedSession($periods, $now),
         'intraday' => $intraday,
+        // [start, end] of the regular session the intraday points belong to,
+        // so a chart can span the whole trading day.
+        'regularSession' => $regularBounds,
     ];
 }
 

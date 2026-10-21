@@ -60,7 +60,7 @@ $pageData = [
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pers Stock Panel</title>
-    <link rel="stylesheet" href="styles.css?v=20">
+    <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
     <div class="page-shell">
@@ -189,6 +189,18 @@ $pageData = [
                 </section>
 
                 <?php if ($list === 'owned'): ?>
+                    <section id="live-charts-panel" class="panel" hidden>
+                        <div class="panel-header">
+                            <div>
+                                <p class="eyebrow">Portfolio</p>
+                                <h2><span class="day-label">Today</span>'s graphs</h2>
+                            </div>
+                        </div>
+                        <p class="live-charts-note">Each stock's price through the trading day, moving with every live trade. The dotted line is the previous close. Point at a graph to see the price at that time.</p>
+                        <!-- Cards are built by app.js, one per stock in My current stocks. -->
+                        <div id="live-charts" class="live-charts"></div>
+                    </section>
+
                     <section id="allocation-panel" class="panel" hidden>
                         <div class="panel-header">
                             <div>
@@ -243,6 +255,6 @@ $pageData = [
 
     <script id="portfolio-data" type="application/json"><?= json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) ?></script>
     <script src="price-stream.js?v=1"></script>
-    <script src="app.js?v=35"></script>
+    <script src="app.js?v=36"></script>
 </body>
 </html>

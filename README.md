@@ -10,6 +10,7 @@ A lightweight PHP web app starter for a stock market dashboard.
 - Click a ticker or its small chart for a large chart of 1 day, 1 week, 1 month, 1 year or 5 years, with the previous close and your average cost drawn in (`public/history.php`)
 - Day, week, and month price changes, with each section sorted by today's change (best first)
 - A small chart of each stock's price during regular trading hours, with the previous close as a dashed line
+- "Today's graphs": a larger graph for each stock in My current stocks, in the style of Perplexity's finance charts. Each spans the whole regular session, so the line fills in as the day goes on; it moves with every live trade, with a pulsing dot on the newest price, a shaded area under the line, and the previous close as a dotted line. Pointing at a graph shows the price and change at that time; the ticker opens the large chart
 - Add, move and remove stocks in either section
 - Stock lists, shares and costs are saved automatically to `data/portfolio.json`
 - Live prices as trades happen, from Yahoo Finance's websocket stream (`public/price-stream.js`): during regular hours they update the price, today's change and your holdings, with a brief green or red flash; before and after hours they update the pre-market or after-hours price under it. The stream is unofficial; its messages are protobuf, decoded with field numbers from the open-source yfinance project

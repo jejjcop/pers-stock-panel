@@ -47,6 +47,8 @@ function quotesResponse(tickers) {
             afterHours: null,
             activeSession: null,
             intraday: [[now - 3600, previousClose], [now - 1800, (previousClose + price) / 2], [now, price]],
+            // Opened three hours ago, closes when market.nextChangeAt says.
+            regularSession: [now - 3 * 3600, now + 2 * 3600 + 5 * 60],
         };
     });
 
