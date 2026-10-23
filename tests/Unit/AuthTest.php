@@ -21,7 +21,6 @@ final class AuthTest extends TestCase
         if (is_file($this->path)) {
             unlink($this->path);
         }
-        $_SERVER = array_diff_key($_SERVER, array_flip(['REMOTE_ADDR', 'HTTP_ORIGIN', 'HTTP_HOST', 'HTTPS', 'HTTP_X_FORWARDED_PROTO']));
     }
 
     public function testAPasswordMustBeLongEnoughAndTypedTheSameTwice(): void
@@ -77,35 +76,5 @@ final class AuthTest extends TestCase
     public function testThePauseDoublesUpToFifteenMinutes(): void
     {
         self::assertSame([0, 30, 60, 120, 900, 900], array_map('lockSeconds', [4, 5, 6, 7, 10, 20]));
-    }
-
-    public function testOnlyThisComputerCountsAsLocal(): void
-    {
-        $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
-        self::assertTrue(isLocalRequest());
-        $_SERVER['REMOTE_ADDR'] = '::1';
-        self::assertTrue(isLocalRequest());
-        $_SERVER['REMOTE_ADDR'] = '192.168.1.20';
-        self::assertFalse(isLocalRequest());
-    }
-
-    public function testRequestsFromOtherSitesAreNotSameOrigin(): void
-    {
-        $_SERVER['HTTP_HOST'] = '127.0.0.1:8080';
-        self::assertTrue(isSameOriginRequest());
-        $_SERVER['HTTP_ORIGIN'] = 'http://127.0.0.1:8080';
-        self::assertTrue(isSameOriginRequest());
-        $_SERVER['HTTP_ORIGIN'] = 'https://evil.example';
-        self::assertFalse(isSameOriginRequest());
-    }
-
-    public function testHttpsIsRecognisedDirectlyAndBehindAProxy(): void
-    {
-        self::assertFalse(isHttps());
-        $_SERVER['HTTP_X_FORWARDED_PROTO'] = 'https';
-        self::assertTrue(isHttps());
-        unset($_SERVER['HTTP_X_FORWARDED_PROTO']);
-        $_SERVER['HTTPS'] = 'on';
-        self::assertTrue(isHttps());
     }
 }

@@ -82,7 +82,7 @@ test.describe('holdings in My current stocks', () => {
     });
 
     test('leaves out kronor when there is no exchange rate', async ({ page }) => {
-        await page.route('**/quotes.php?*', (route) => {
+        await page.route('**/quotes?*', (route) => {
             const symbols = new URL(route.request().url()).searchParams.get('symbols') ?? '';
             return route.fulfill({ json: { ...quotesResponse(symbols.split(',')), fxRates: {} } });
         });

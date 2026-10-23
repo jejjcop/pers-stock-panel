@@ -34,7 +34,7 @@ function quoteFor(ticker) {
     };
 }
 
-/** A response shaped like public/quotes.php's, for whatever tickers the page asks for. */
+/** A response shaped like /quotes's (QuoteController), for whatever tickers the page asks for. */
 function quotesResponse(tickers) {
     const now = Math.floor(Date.now() / 1000);
     const quotes = {};
@@ -83,7 +83,7 @@ const history = {
     '1y': { previousClose: null, closes: [800, 950, 1088] },
 };
 
-/** A response shaped like public/history.php's. */
+/** A response shaped like /history's (HistoryController). */
 function historyResponse(symbol, range) {
     const { previousClose, closes } = history[range] ?? { previousClose: null, closes: [1000, 1088] };
     const now = Math.floor(Date.now() / 1000);
@@ -123,9 +123,15 @@ function readAuth() {
     return fs.existsSync(authFile) ? JSON.parse(fs.readFileSync(authFile, 'utf8')) : null;
 }
 
-/** Logs a page or a whole browser context in with the test password. */
+/**
+ * Logs a page or a whole browser context in with the test password. Like a
+ * browser, it first opens the login page for the form's security token,
+ * which Laravel checks.
+ */
 async function logIn(target) {
-    const response = await target.request.post('/login.php', { form: { password: testPassword }, maxRedirects: 0 });
+    const loginPage = await (await target.request.get('/login')).text();
+    const token = /name="_token" value="([^"]+)"/.exec(loginPage)?.[1];
+    const response = await target.request.post('/login', { form: { _token: token ?? '', password: testPassword }, maxRedirects: 0 });
     base.expect(response.status(), 'logging in with the test password').toBe(303);
 }
 
@@ -209,7 +215,7 @@ function createStream() {
 /**
  * Answers a page's (or a whole browser context's) requests to Yahoo with
  * made-up data, so tests never touch the network: quote and history
- * requests through the app's PHP endpoints, and the live price stream.
+ * requests to the app, and the live price stream.
  */
 async function stubYahoo(target, stream) {
     await target.routeWebSocket(/streamer\.finance\.yahoo\.com/, (connection) => {
@@ -225,11 +231,11 @@ async function stubYahoo(target, stream) {
             (request.unsubscribe ?? []).forEach((ticker) => stream.subscribed.delete(ticker));
         });
     });
-    await target.route('**/quotes.php?*', (route) => {
+    await target.route('**/quotes?*', (route) => {
         const symbols = new URL(route.request().url()).searchParams.get('symbols') ?? '';
         return route.fulfill({ json: quotesResponse(symbols.split(',').filter(Boolean)) });
     });
-    await target.route('**/history.php?*', (route) => {
+    await target.route('**/history?*', (route) => {
         const params = new URL(route.request().url()).searchParams;
         return route.fulfill({ json: historyResponse(params.get('symbol'), params.get('range')) });
     });

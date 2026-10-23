@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 use StockPanel\StockPanel;
 
@@ -11,15 +10,9 @@ use StockPanel\StockPanel;
  */
 class DashboardController extends Controller
 {
-    public function __invoke(): View|RedirectResponse
+    // Only reached when logged in: the route's 'logged.in' middleware checks.
+    public function __invoke(): View
     {
-        // For now the login is still checked by the old code in src/auth.php.
-        // Step 2 replaces this with Laravel's own login and middleware.
-        if (!isLoggedIn()) {
-            return redirect('login.php', 303);
-        }
-        session_write_close();
-
         $portfolioPath = portfolioPath();
         $portfolio = loadPortfolio($portfolioPath);
         $isNewPortfolio = $portfolio === null;

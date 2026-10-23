@@ -12,6 +12,9 @@ const legacyHoldingsKey = 'stock-panel-holdings';
 const legacyMigratedKey = 'stock-panel-moved-to-data-file';
 const holdings = new Map();
 const saveStatus = document.getElementById('save-status');
+// Laravel's token for requests that save, from the page's <meta> tag. It
+// shows the request comes from this page and not from another site.
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 const typingSaveDelayMs = 600;
 const saveRetryDelayMs = 10_000;
 let saveTimer = null;
@@ -106,7 +109,7 @@ function sendToLoginIfLoggedOut(response) {
     if (response.status !== 401) {
         return false;
     }
-    window.location.assign('login.php?expired=1');
+    window.location.assign('login?expired=1');
     return true;
 }
 
@@ -186,9 +189,9 @@ async function savePortfolio() {
     saveInFlight = true;
     showSaveStatus('Saving...');
     try {
-        const response = await fetch('data.php', {
+        const response = await fetch('portfolio', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': csrfToken },
             body: JSON.stringify(portfolioState()),
             cache: 'no-store',
         });
@@ -1402,7 +1405,7 @@ async function loadLargeChart(range) {
     chartDialogStatus.textContent = 'Loading...';
 
     try {
-        const response = await fetch(`history.php?symbol=${encodeURIComponent(largeChartTicker)}&range=${range}`, {
+        const response = await fetch(`history?symbol=${encodeURIComponent(largeChartTicker)}&range=${range}`, {
             headers: { Accept: 'application/json' },
             cache: 'no-store',
         });
@@ -1666,7 +1669,7 @@ async function refreshQuotes() {
     updateRefreshCountdown();
 
     try {
-        const response = await fetch(`quotes.php?symbols=${encodeURIComponent(tickers.join(','))}`, {
+        const response = await fetch(`quotes?symbols=${encodeURIComponent(tickers.join(','))}`, {
             headers: { Accept: 'application/json' },
             cache: 'no-store',
         });
@@ -2026,9 +2029,9 @@ window.addEventListener('pagehide', () => {
 
     window.clearTimeout(saveTimer);
     saveTimer = null;
-    fetch('data.php', {
+    fetch('portfolio', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
         body: JSON.stringify(portfolioState()),
         keepalive: true,
     });

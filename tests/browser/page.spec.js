@@ -73,7 +73,7 @@ test.describe('the page', () => {
                     MSFT: { shares: 800.5, cost: 410 },
                 },
             });
-            await page.route('**/quotes.php?*', (route) => {
+            await page.route('**/quotes?*', (route) => {
                 const symbols = (new URL(route.request().url()).searchParams.get('symbols') ?? '').split(',');
                 const response = quotesResponse(symbols);
                 Object.entries(response.quotes).forEach(([ticker, quote]) => {
@@ -105,7 +105,7 @@ test.describe('the page', () => {
 
         // Serves quotes whose latest regular-hours trade was the given time ago.
         async function lastTradeAgo(page, ago) {
-            await page.route('**/quotes.php?*', (route) => {
+            await page.route('**/quotes?*', (route) => {
                 const symbols = (new URL(route.request().url()).searchParams.get('symbols') ?? '').split(',');
                 const response = quotesResponse(symbols);
                 Object.values(response.quotes).forEach((quote) => {

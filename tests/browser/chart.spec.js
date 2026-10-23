@@ -43,7 +43,7 @@ test.describe('the large chart', () => {
         const dialog = page.locator('#chart-dialog');
         await expect(page.locator('#chart-dialog-change')).toHaveText(/today$/);
 
-        const request = page.waitForRequest((sent) => sent.url().includes('history.php') && sent.url().includes('range=1y'));
+        const request = page.waitForRequest((sent) => sent.url().includes('/history?') && sent.url().includes('range=1y'));
         await dialog.getByRole('button', { name: '1Y' }).click();
         await request;
 
@@ -92,7 +92,7 @@ test.describe('the large chart', () => {
     });
 
     test('says yesterday when the one-day chart shows yesterday\'s session', async ({ page }) => {
-        await page.route('**/history.php?*', (route) => {
+        await page.route('**/history?*', (route) => {
             const now = Math.floor(Date.now() / 1000) - 86_400;
             return route.fulfill({
                 json: {
@@ -129,7 +129,7 @@ test.describe('the large chart', () => {
     });
 
     test('says so when there are no trades yet today', async ({ page }) => {
-        await page.route('**/history.php?*', (route) => route.fulfill({
+        await page.route('**/history?*', (route) => route.fulfill({
             json: { symbol: 'MU', range: '1d', currency: 'USD', previousClose: 1045.56, points: [] },
         }));
         await openFromTicker(page, 'MU');
@@ -142,7 +142,7 @@ test.describe('the large chart', () => {
         test.use({ expectedConsoleErrors: [/status of 502/] });
 
         test('says so in the chart window', async ({ page }) => {
-            await page.route('**/history.php?*', (route) => route.fulfill({
+            await page.route('**/history?*', (route) => route.fulfill({
                 status: 502,
                 json: { error: 'Yahoo Finance returned HTTP 500.' },
             }));

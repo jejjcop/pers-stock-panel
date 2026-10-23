@@ -17,22 +17,22 @@ test.describe('logging in', () => {
     test('sends you to the login page until you log in', async ({ page }) => {
         await page.goto('/');
 
-        await expect(page).toHaveURL(/\/login\.php$/);
+        await expect(page).toHaveURL(/\/login$/);
         await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible();
         await expect(page.locator('tbody[data-list]')).toHaveCount(0);
     });
 
     test('refuses a wrong password', async ({ page }) => {
-        await page.goto('/login.php');
+        await page.goto('/login');
 
         await submitPassword(page, 'not-the-password');
 
         await expect(page.getByRole('alert')).toHaveText('Wrong password.');
-        await expect(page).toHaveURL(/\/login\.php$/);
+        await expect(page).toHaveURL(/\/login$/);
     });
 
     test('opens the app with the right password, until you log out', async ({ page }) => {
-        await page.goto('/login.php');
+        await page.goto('/login');
 
         await submitPassword(page, testPassword);
 
@@ -41,11 +41,11 @@ test.describe('logging in', () => {
         await page.getByRole('button', { name: 'Log out' }).click();
         await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible();
         await page.goto('/');
-        await expect(page).toHaveURL(/\/login\.php$/);
+        await expect(page).toHaveURL(/\/login$/);
     });
 
     test('pauses logging in after too many wrong passwords', async ({ page }) => {
-        await page.goto('/login.php');
+        await page.goto('/login');
 
         for (let attempt = 1; attempt <= 5; attempt += 1) {
             await submitPassword(page, `wrong-${attempt}`);
@@ -62,12 +62,25 @@ test.describe('logging in', () => {
     test('gives nothing away to requests without a login', async ({ page }) => {
         const before = readPortfolio();
 
-        const quotes = await page.request.get('/quotes.php?symbols=MU');
-        const history = await page.request.get('/history.php?symbol=MU&range=1d');
-        const save = await page.request.post('/data.php', { data: { stocks: [], holdings: {} } });
+        const quotes = await page.request.get('/quotes?symbols=MU');
+        const history = await page.request.get('/history?symbol=MU&range=1d');
+        // Not from the app's own page and without its security token, so
+        // Laravel refuses it (419) before even checking the login.
+        const save = await page.request.post('/portfolio', { data: { stocks: [], holdings: {} } });
 
-        expect([quotes.status(), history.status(), save.status()]).toEqual([401, 401, 401]);
-        expect(await save.json()).toEqual({ error: 'You are not logged in.' });
+        expect([quotes.status(), history.status(), save.status()]).toEqual([401, 401, 419]);
+        expect(await quotes.json()).toEqual({ error: 'You are not logged in.' });
+        expect(readPortfolio()).toEqual(before);
+    });
+
+    test('refuses to save from anywhere but the app\'s own page, even when logged in', async ({ page }) => {
+        await logIn(page);
+        const before = readPortfolio();
+
+        // As if another website made the browser send this.
+        const save = await page.request.post('/portfolio', { data: { stocks: [], holdings: {} } });
+
+        expect(save.status()).toBe(419);
         expect(readPortfolio()).toEqual(before);
     });
 
@@ -104,10 +117,10 @@ test.describe('logging in', () => {
             // As if the login had expired. The next price refresh goes to the
             // app's own server (not the test's made-up prices), which refuses it.
             await context.clearCookies();
-            await page.unroute('**/quotes.php?*');
+            await page.unroute('**/quotes?*');
             await page.getByRole('button', { name: 'Refresh prices' }).click();
 
-            await expect(page).toHaveURL(/\/login\.php\?expired=1$/);
+            await expect(page).toHaveURL(/\/login\?expired=1$/);
             await expect(page.getByRole('status')).toHaveText('You have been logged out. Log in again to continue.');
         });
     });

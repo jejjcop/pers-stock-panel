@@ -105,7 +105,7 @@ test.describe('saving to data/portfolio.json', () => {
         test.use({ expectedConsoleErrors: [/status of 500/] });
 
         test('says so on the page', async ({ page }) => {
-            await page.route('**/data.php', (route) => route.fulfill({ status: 500, json: { error: 'The data file could not be written.' } }));
+            await page.route('**/portfolio', (route) => route.fulfill({ status: 500, json: { error: 'The data file could not be written.' } }));
             await page.goto('/');
 
             await addStock(page, 'TSLA', 'owned');

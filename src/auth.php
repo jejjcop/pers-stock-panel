@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-// Password login for the single user of the app. The password hash and the
+// The password for the single user of the app. The password hash and the
 // count of failed attempts live in auth.json next to portfolio.json, outside
-// the web root and outside Git.
+// the web root and outside Git. Whether a browser is logged in is kept in
+// Laravel's session (app/Http/Controllers/LoginController.php).
 
 require_once __DIR__ . '/portfolio.php';
 
@@ -13,8 +14,6 @@ const PASSWORD_MIN_LENGTH = 8;
 const LOGIN_FREE_ATTEMPTS = 5;
 const LOGIN_FIRST_LOCK_SECONDS = 30;
 const LOGIN_MAX_LOCK_SECONDS = 900;
-// How long a login lasts without using the app; every visit extends it.
-const SESSION_LIFETIME_SECONDS = 30 * 24 * 3600;
 
 function authPath(): string
 {
@@ -122,104 +121,4 @@ function attemptLogin(string $path, string $password, int $now): array
     saveAuth($path, $auth);
 
     return ['ok' => false, 'retryAfter' => $auth['lockedUntil'] - $now];
-}
-
-function isHttps(): bool
-{
-    return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
-}
-
-// Setting the first password is only allowed from the computer the app runs
-// on, so nobody else can claim a freshly installed app.
-function isLocalRequest(): bool
-{
-    return in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
-}
-
-// Requests that change something must come from this site's own pages.
-function isSameOriginRequest(): bool
-{
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? null;
-    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
-
-    return $origin === null || $origin === 'http://' . $host || $origin === 'https://' . $host;
-}
-
-function startSession(): void
-{
-    if (session_status() === PHP_SESSION_ACTIVE) {
-        return;
-    }
-
-    // An own folder, so other PHP apps' clean-up of the shared temp folder
-    // cannot end the login early.
-    $sessionDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'pers-stock-panel-sessions';
-    if (!is_dir($sessionDirectory)) {
-        @mkdir($sessionDirectory, 0700, true);
-    }
-    session_save_path($sessionDirectory);
-    ini_set('session.gc_maxlifetime', (string) SESSION_LIFETIME_SECONDS);
-    ini_set('session.use_strict_mode', '1');
-    session_name('pers_stock_panel');
-    $cookie = [
-        'lifetime' => SESSION_LIFETIME_SECONDS,
-        'path' => '/',
-        'secure' => isHttps(),
-        'httponly' => true,
-        'samesite' => 'Strict',
-    ];
-    session_set_cookie_params($cookie);
-    session_start();
-
-    // Using the app extends the login.
-    if (!empty($_SESSION['loggedIn'])) {
-        setcookie(session_name(), session_id(), [
-            'expires' => time() + SESSION_LIFETIME_SECONDS,
-            'path' => $cookie['path'],
-            'secure' => $cookie['secure'],
-            'httponly' => true,
-            'samesite' => 'Strict',
-        ]);
-    }
-}
-
-function isLoggedIn(): bool
-{
-    startSession();
-
-    return ($_SESSION['loggedIn'] ?? false) === true;
-}
-
-function logIn(): void
-{
-    startSession();
-    // A new session id at login, so an id seen before login is worthless.
-    session_regenerate_id(true);
-    $_SESSION['loggedIn'] = true;
-}
-
-function logOut(): void
-{
-    startSession();
-    $_SESSION = [];
-    setcookie(session_name(), '', ['expires' => time() - 3600, 'path' => '/', 'secure' => isHttps(), 'httponly' => true, 'samesite' => 'Strict']);
-    session_destroy();
-}
-
-/**
- * For the JSON endpoints: answers 401 and stops unless logged in. The session
- * is closed right after the check, so a slow request (e.g. to Yahoo) does not
- * hold up the page's other requests.
- */
-function requireLoginForApi(): void
-{
-    if (!isLoggedIn()) {
-        session_write_close();
-        http_response_code(401);
-        header('Content-Type: application/json; charset=utf-8');
-        echo '{"error":"You are not logged in."}';
-        exit;
-    }
-    session_write_close();
 }

@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pers Stock Panel</title>
+    {{-- For public/app.js: the token Laravel checks on requests that save. --}}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="stylesheet" href="styles.css?v=22">
 </head>
 <body>
@@ -23,7 +25,8 @@
                     </span>
                 </div>
                 <button id="refresh-quotes" class="primary-button" type="button">Refresh prices</button>
-                <form method="post" action="logout.php">
+                <form method="post" action="{{ route('logout') }}">
+                    @csrf
                     <button class="secondary-button" type="submit">Log out</button>
                 </form>
             </div>
@@ -200,6 +203,6 @@
 
     <script id="portfolio-data" type="application/json">{!! json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) !!}</script>
     <script src="price-stream.js?v=1"></script>
-    <script src="app.js?v=36"></script>
+    <script src="app.js?v=37"></script>
 </body>
 </html>

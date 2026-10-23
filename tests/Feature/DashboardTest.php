@@ -3,48 +3,42 @@
 namespace Tests\Feature;
 
 use Tests\TestCase;
+use Tests\UsesTemporaryDataFolder;
 
 /**
  * The main page, sent through Laravel the way a browser request would be.
  */
 class DashboardTest extends TestCase
 {
-    private string $dataDirectory;
+    use UsesTemporaryDataFolder;
 
     protected function setUp(): void
     {
         parent::setUp();
-
-        // A data folder of the test's own, never data/portfolio.json.
-        $this->dataDirectory = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'stock-panel-dashboard-test-' . bin2hex(random_bytes(6));
-        mkdir($this->dataDirectory);
-        putenv('STOCK_PANEL_DATA_DIR=' . $this->dataDirectory);
+        $this->setUpDataFolder();
     }
 
     protected function tearDown(): void
     {
-        array_map('unlink', glob($this->dataDirectory . DIRECTORY_SEPARATOR . '*') ?: []);
-        rmdir($this->dataDirectory);
-        putenv('STOCK_PANEL_DATA_DIR');
-        $_SESSION = [];
-
+        $this->tearDownDataFolder();
         parent::tearDown();
     }
 
     public function testSendsYouToTheLoginPageUntilYouLogIn(): void
     {
-        $this->get('/')->assertRedirect('login.php')->assertStatus(303);
+        $this->get('/')->assertRedirect('/login')->assertStatus(303);
     }
 
     public function testShowsYourStocksOnceLoggedIn(): void
     {
-        file_put_contents($this->dataDirectory . DIRECTORY_SEPARATOR . 'portfolio.json', json_encode([
+        $this->writeDataFile('portfolio.json', [
             'stocks' => [['ticker' => 'MU', 'list' => 'owned'], ['ticker' => 'NVDA', 'list' => 'monitor']],
             'holdings' => ['MU' => ['shares' => 19, 'cost' => 989.5]],
-        ]));
-        $_SESSION['loggedIn'] = true;
+        ]);
 
-        $response = $this->get('/');
+        // withSession() starts the request with this in Laravel's session,
+        // as if the browser had logged in before.
+        $response = $this->withSession(['logged_in' => true])->get('/');
 
         $response->assertOk();
         $response->assertViewIs('dashboard');

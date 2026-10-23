@@ -56,7 +56,7 @@ test.describe('live prices from the stream', () => {
         stream.send({ ticker: 'MU', price: 1100.5, time: Date.now() + 60_000 });
         await expect(row(page, 'MU').locator('.quote-price')).toHaveText('$1,100.50');
 
-        const refreshed = page.waitForResponse(/quotes\.php/);
+        const refreshed = page.waitForResponse(/\/quotes\?/);
         await page.getByRole('button', { name: 'Refresh prices' }).click();
         await refreshed;
 

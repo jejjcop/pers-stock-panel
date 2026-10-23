@@ -7,7 +7,7 @@ A lightweight PHP web app starter for a stock market dashboard.
 - Two sections: "My current stocks" and "Stocks to monitor"
 - Enter shares and average cost for stocks you own to see each position's value, gain/loss and today's gain in money, plus portfolio totals including today's change and a breakdown of each stock's share of the portfolio
 - Total value and today's change also in Swedish kronor, at today's exchange rate from Yahoo Finance (cost and gain stay in the stock's currency, since converting them needs the rate on the day of purchase)
-- Click a ticker or its small chart for a large chart of 1 day, 1 week, 1 month, 1 year or 5 years, with the previous close and your average cost drawn in (`public/history.php`)
+- Click a ticker or its small chart for a large chart of 1 day, 1 week, 1 month, 1 year or 5 years, with the previous close and your average cost drawn in (`/history`, `app/Http/Controllers/HistoryController.php`)
 - Day, week, and month price changes, with each section sorted by today's change (best first)
 - A small chart of each stock's price during regular trading hours, with the previous close as a dashed line
 - "Today's graphs": a larger graph for each stock in My current stocks, in the style of Perplexity's finance charts. Each spans the whole regular session, so the line fills in as the day goes on; it moves with every live trade, with a pulsing dot on the newest price, a shaded area under the line, and the previous close as a dotted line. Pointing at a graph shows the price and change at that time; the ticker opens the large chart
@@ -24,7 +24,7 @@ Requires PHP 8.2+ with the cURL extension enabled. Yahoo Finance is unofficial a
 
 ## Run locally
 
-The app is being moved to [Laravel](https://laravel.com) on the `laravel` branch. There, the main page is a Laravel route (`routes/web.php`), controller (`app/Http/Controllers/DashboardController.php`) and Blade view (`resources/views/dashboard.blade.php`); the other addresses are still plain PHP files in `public/` until they move too.
+The app is being moved to [Laravel](https://laravel.com) on the `laravel` branch. There, every address is a Laravel route in `routes/web.php`, answered by a controller in `app/Http/Controllers/`; the pages are Blade views in `resources/views/`. A middleware (`app/Http/Middleware/RequireLogin.php`) checks the login before every page and data address. The Yahoo Finance code and the data files are still the plain PHP in `src/`.
 
 ```bash
 composer install
@@ -64,8 +64,9 @@ The app is protected by a password. The first visit asks you to choose one; that
 
 - A login lasts 30 days in the same browser and is extended every time you use the app. **Log out** ends it.
 - After 5 wrong passwords in a row, logging in pauses for 30 seconds, then for longer each time (up to 15 minutes).
-- The page and every endpoint (`data.php`, `quotes.php`, `history.php`) refuse requests without a login. An open page whose login has run out goes to the login page.
-- Over HTTPS (e.g. on a web host) the login cookie is only ever sent encrypted. The app itself does not provide HTTPS; a web host or a proxy in front of it does.
+- The page and every data address (`/quotes`, `/history`, `/portfolio`) refuse requests without a login. An open page whose login has run out goes to the login page.
+- The login is kept in Laravel's session (`storage/framework/sessions`), and its cookie is never sent along with requests from other sites.
+- On a web host with HTTPS, set `SESSION_SECURE_COOKIE=true` in `.env` so the login cookie is only ever sent encrypted. The app itself does not provide HTTPS; a web host or a proxy in front of it does.
 - Forgot the password? Delete `data/auth.json` and open the app on this computer to choose a new one. Your stocks are not affected.
 
 ## Your data
@@ -74,7 +75,7 @@ Your stock lists, shares and average costs are saved to `data/portfolio.json` as
 
 - If `data/portfolio.json` does not exist, the page starts with the built-in stocks. The first time, it also copies in anything older versions of the app saved in that browser.
 - If the file is damaged, it is renamed to `portfolio.json.invalid-<date>` rather than overwritten, and the page starts with the built-in stocks.
-- Only the page itself can save: `public/data.php` accepts JSON from the same address only.
+- Only the page itself can save: Laravel's CSRF protection refuses saves (`/portfolio`) that do not come from the app's own page.
 
 ## Tests
 
