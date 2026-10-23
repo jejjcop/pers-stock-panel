@@ -2,10 +2,8 @@
 
 declare(strict_types=1);
 
+// Also loads the functions in src/, which composer.json lists under "files".
 require __DIR__ . '/../vendor/autoload.php';
-require __DIR__ . '/../src/quote_functions.php';
-require __DIR__ . '/../src/portfolio.php';
-require __DIR__ . '/../src/auth.php';
 
 /**
  * Converts a New York wall-clock time such as '2026-10-05 09:30' to a Unix

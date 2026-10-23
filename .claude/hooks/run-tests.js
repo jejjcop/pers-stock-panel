@@ -13,7 +13,7 @@ const path = require('node:path');
 const projectDir = process.env.CLAUDE_PROJECT_DIR || path.resolve(__dirname, '..', '..');
 const stateFile = path.join(__dirname, '.last-tested');
 // Everything that can change how the app or the tests behave.
-const watchedPaths = ['public', 'src', 'tests', 'composer.json', 'composer.lock', 'package.json', 'package-lock.json', 'phpunit.xml', 'playwright.config.js'];
+const watchedPaths = ['app', 'bootstrap', 'config', 'routes', 'resources', 'public', 'src', 'tests', 'composer.json', 'composer.lock', 'package.json', 'package-lock.json', 'phpunit.xml', 'playwright.config.js'];
 
 function readStdin() {
     try {

@@ -18,7 +18,9 @@ final class AuthTest extends TestCase
 
     protected function tearDown(): void
     {
-        @unlink($this->path);
+        if (is_file($this->path)) {
+            unlink($this->path);
+        }
         $_SERVER = array_diff_key($_SERVER, array_flip(['REMOTE_ADDR', 'HTTP_ORIGIN', 'HTTP_HOST', 'HTTPS', 'HTTP_X_FORWARDED_PROTO']));
     }
 

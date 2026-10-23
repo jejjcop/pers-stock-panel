@@ -1,6 +1,14 @@
 # Installed by Composer; recreate with `composer install`.
 /vendor/
 
+# Laravel's settings for this computer, including its secret key. Each copy
+# makes its own from .env.example.
+/.env
+/.env.backup
+/storage/*.key
+/public/hot
+/public/storage
+
 # Your stock lists, shares and costs, written by the page as you use it.
 /data/
 

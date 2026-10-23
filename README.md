@@ -24,12 +24,19 @@ Requires PHP 8.2+ with the cURL extension enabled. Yahoo Finance is unofficial a
 
 ## Run locally
 
+The app is being moved to [Laravel](https://laravel.com) on the `laravel` branch. There, the main page is a Laravel route (`routes/web.php`), controller (`app/Http/Controllers/DashboardController.php`) and Blade view (`resources/views/dashboard.blade.php`); the other addresses are still plain PHP files in `public/` until they move too.
+
 ```bash
-cd pers-stock-panel
-php -S 127.0.0.1:8080 -t public
+composer install
+cp .env.example .env          # first time only: Laravel's settings for this computer
+php artisan key:generate      # first time only: the secret key in .env
+cd public
+php -d opcache.enable=0 -S 127.0.0.1:8080 -t . ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
 ```
 
-Then open http://127.0.0.1:8080 in your browser.
+Then open http://127.0.0.1:8080 in your browser. The last line is PHP's built-in web server with Laravel's router script, which sends every address that is not a file in `public/` to Laravel. OPcache is turned off there because in PHP 8.5.11 it makes calls to `mb_*` functions reach the wrong function once the `fileinfo` extension, which Laravel needs, is loaded.
+
+Laravel needs the PHP extensions `fileinfo`, `mbstring` and `openssl`, and Composer needs `zip`.
 
 ## Automatic updates on this PC (continuous deployment)
 
