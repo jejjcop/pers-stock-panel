@@ -1,4 +1,4 @@
-{{-- The login page. LoginController hands it $passwordSet, $canChoosePassword and $notice. --}}
+{{-- The login page. LoginController hands it $passwordSet, $canChoosePassword, $minLength and $notice. --}}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,14 +33,14 @@
                     <label class="search-box" for="password">
                         <span>Password</span>
                         <input id="password" name="password" type="password" required autofocus
-                            minlength="{{ $passwordSet ? 1 : PASSWORD_MIN_LENGTH }}"
+                            minlength="{{ $passwordSet ? 1 : $minLength }}"
                             autocomplete="{{ $passwordSet ? 'current-password' : 'new-password' }}">
                     </label>
                     @if (!$passwordSet)
                         <label class="search-box" for="password_confirmation">
                             <span>The same password again</span>
                             <input id="password_confirmation" name="password_confirmation" type="password" required
-                                minlength="{{ PASSWORD_MIN_LENGTH }}" autocomplete="new-password">
+                                minlength="{{ $minLength }}" autocomplete="new-password">
                         </label>
                     @endif
                     <button class="primary-button" type="submit">{{ $passwordSet ? 'Log in' : 'Save password and log in' }}</button>

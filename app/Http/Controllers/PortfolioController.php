@@ -4,11 +4,10 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use JsonException;
 
 /**
- * Saves the page's stock lists and holdings to data/portfolio.json.
+ * Saves the page's stock lists and holdings to the database.
  *
  * Only the page itself can save: Laravel refuses POST requests from other
  * sites (its CSRF protection) before this code runs.
@@ -39,10 +38,7 @@ class PortfolioController extends Controller
             return $this->respond(400, ['error' => 'The stock list contains an invalid ticker or section, or more than ' . PORTFOLIO_MAX_STOCKS . ' stocks.']);
         }
 
-        if (!savePortfolio(portfolioPath(), $portfolio)) {
-            Log::error('Could not write ' . portfolioPath());
-            return $this->respond(500, ['error' => 'The data file could not be written.']);
-        }
+        $request->user()->savePortfolio($portfolio);
 
         return $this->respond(200, ['savedAt' => gmdate(DATE_ATOM)]);
     }

@@ -1,10 +1,14 @@
 // @ts-check
 const fs = require('node:fs');
 const path = require('node:path');
+const { DatabaseSync } = require('node:sqlite');
 const base = require('@playwright/test');
 
+// The app's data folder while the tests run, and the database in it.
 const dataDir = /** @type {string} */ (process.env.STOCK_PANEL_TEST_DATA_DIR);
-const dataFile = path.join(dataDir, 'portfolio.json');
+const databaseFile = path.join(dataDir, 'database.sqlite');
+// An empty database with all the app's tables, made by global-setup.js.
+const templateDatabase = path.join(/** @type {string} */ (process.env.STOCK_PANEL_TEST_TEMPLATE_DIR), 'database.sqlite');
 
 /**
  * Made-up prices the tests use instead of Yahoo Finance. Day change is
@@ -96,31 +100,84 @@ function historyResponse(symbol, range) {
     };
 }
 
-/** Replaces the data file with these stocks and holdings, or removes it when null. */
 // The password the tests log in with, and its hash as PHP's password_hash()
 // made it.
 const testPassword = 'test-password-123';
 const testPasswordHash = '$2y$12$6AyoucMaW.Bdiea6q8dWXu5kXsr4cyb8n8mDvVfVrdELHSf8Nnnoe';
-const authFile = path.join(dataDir, 'auth.json');
 
-/**
- * Replaces the data file with these stocks and holdings, or removes it when
- * null. The test password is set up again too, unless withPassword is false.
- */
-function writePortfolio(portfolio, { withPassword = true } = {}) {
-    fs.rmSync(dataDir, { recursive: true, force: true });
-    fs.mkdirSync(dataDir, { recursive: true });
-    if (portfolio !== null) {
-        fs.writeFileSync(dataFile, JSON.stringify({ holdings: {}, ...portfolio }, null, 2));
-    }
-    if (withPassword) {
-        fs.writeFileSync(authFile, JSON.stringify({ passwordHash: testPasswordHash, failedAttempts: 0, lockedUntil: 0 }));
+/** Opens the test database, runs `work` on it, and closes it again. */
+function withDatabase(work) {
+    // Waits up to 5 seconds if the app is writing to it at that moment.
+    const database = new DatabaseSync(databaseFile, { timeout: 5000 });
+    try {
+        return work(database);
+    } finally {
+        database.close();
     }
 }
 
-/** What auth.json holds, or null when there is none. */
+/**
+ * Empties the test database, before every test. The first time it copies the
+ * empty database made by global-setup.js; after that it empties the tables
+ * instead of deleting the file, which Windows refuses while the app still
+ * has it open for a late request from the previous test. Each test's user
+ * then gets a new id, so such a late request cannot reach its stocks.
+ */
+function resetDatabase() {
+    if (!fs.existsSync(databaseFile)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+        fs.copyFileSync(templateDatabase, databaseFile);
+    }
+    withDatabase((database) => database.exec('DELETE FROM stocks; DELETE FROM users;'));
+}
+
+/**
+ * Sets up the test's data: the test password, and these stocks and holdings
+ * saved. With null, nothing has been saved yet, so the page starts with the
+ * built-in stocks. With withPassword false there is no user at all, so the
+ * app asks for a password. Within a test the user stays the same, so a page
+ * that is already logged in stays logged in.
+ */
+function writePortfolio(portfolio, { withPassword = true } = {}) {
+    if (!withPassword && portfolio !== null) {
+        throw new Error('Stocks belong to the user, so there can be none without a password.');
+    }
+
+    withDatabase((database) => {
+        database.exec('DELETE FROM stocks;');
+        if (!withPassword) {
+            database.exec('DELETE FROM users;');
+            return;
+        }
+
+        // The format Laravel stores times in, e.g. '2026-10-23 12:00:00'.
+        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const savedAt = portfolio === null ? null : now;
+        let user = database.prepare('SELECT id FROM users').get();
+        if (user) {
+            database.prepare('UPDATE users SET password = ?, failed_logins = 0, locked_until = NULL, portfolio_saved_at = ? WHERE id = ?')
+                .run(testPasswordHash, savedAt, user.id);
+        } else {
+            const inserted = database.prepare(
+                'INSERT INTO users (name, password, failed_logins, portfolio_saved_at, created_at, updated_at) VALUES (?, ?, 0, ?, ?, ?)'
+            ).run('owner', testPasswordHash, savedAt, now, now);
+            user = { id: inserted.lastInsertRowid };
+        }
+
+        const insertStock = database.prepare(
+            'INSERT INTO stocks (user_id, ticker, list, position, shares, cost, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        (portfolio?.stocks ?? []).forEach((stock, position) => {
+            const holding = portfolio.holdings?.[stock.ticker] ?? {};
+            insertStock.run(user.id, stock.ticker, stock.list, position, holding.shares ?? null, holding.cost ?? null, now, now);
+        });
+    });
+}
+
+/** The password hash and the count of wrong passwords, or null when no password has been chosen. */
 function readAuth() {
-    return fs.existsSync(authFile) ? JSON.parse(fs.readFileSync(authFile, 'utf8')) : null;
+    const user = withDatabase((database) => database.prepare('SELECT password, failed_logins FROM users').get());
+    return user ? { passwordHash: user.password, failedAttempts: user.failed_logins } : null;
 }
 
 /**
@@ -135,15 +192,30 @@ async function logIn(target) {
     base.expect(response.status(), 'logging in with the test password').toBe(303);
 }
 
-/** What the page last saved, or null when there is no data file. */
+/**
+ * What the page last saved, in the shape it sends ({ stocks, holdings }), or
+ * null when nothing has been saved yet.
+ */
 function readPortfolio() {
-    return fs.existsSync(dataFile) ? JSON.parse(fs.readFileSync(dataFile, 'utf8')) : null;
+    return withDatabase((database) => {
+        const user = database.prepare('SELECT id, portfolio_saved_at FROM users').get();
+        if (!user || user.portfolio_saved_at === null) {
+            return null;
+        }
+
+        const stocks = database.prepare('SELECT ticker, list, shares, cost FROM stocks WHERE user_id = ? ORDER BY position').all(user.id);
+        const holdings = {};
+        stocks
+            .filter((stock) => stock.shares !== null || stock.cost !== null)
+            .forEach((stock) => { holdings[stock.ticker] = { shares: stock.shares, cost: stock.cost }; });
+        return { stocks: stocks.map((stock) => ({ ticker: stock.ticker, list: stock.list })), holdings };
+    });
 }
 
 /**
  * "TICKER/list" for each saved stock in alphabetical order, e.g.
- * ['MU/owned', 'NVDA/monitor']. The order in the file follows the page's
- * sorting by today's change, which the tests do not depend on.
+ * ['MU/owned', 'NVDA/monitor']. The saved order follows the page's sorting
+ * by today's change, which the tests do not depend on.
  */
 function savedStocks() {
     const saved = readPortfolio();
@@ -248,6 +320,11 @@ async function stubYahoo(target, stream) {
  * the test's expectedConsoleErrors.
  */
 const test = base.test.extend({
+    // Runs at the start of every test, before its beforeEach hooks.
+    freshDatabase: [async ({}, use) => {
+        resetDatabase();
+        await use();
+    }, { auto: true }],
     expectedConsoleErrors: [/** @type {RegExp[]} */ ([]), { option: true }],
     // Whether each test starts logged in; the login tests turn this off.
     loggedIn: [true, { option: true }],

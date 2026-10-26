@@ -22,7 +22,7 @@ The user's everyday app on http://127.0.0.1:8080 is an installed copy in `%LOCAL
 
 ## Rules
 
-- Never read, write or delete `data/portfolio.json` (the user's real holdings) or `data/auth.json` (their password hash) in tests or experiments. The browser tests log in with their own test password in their own data folder. The browser tests use `STOCK_PANEL_DATA_DIR`; for manual checks, run a copy of the app on another port with that variable set.
+- Never read, write or delete `data/database.sqlite` (the user's real holdings and password hash, on the laravel branch), `data/portfolio.json` or `data/auth.json` (the same, as older versions saved them) in tests or experiments, and never run artisan commands against the real data folder. The browser tests log in with their own test password in their own data folder. The browser tests use `STOCK_PANEL_DATA_DIR`; for manual checks, run a copy of the app on another port with that variable set.
 - Commit and push to GitHub (`jejjcop/pers-stock-panel`, private) only when the user asks. End commit messages with the attribution line Claude Code provides.
 - Keep the page's text in English. Answer the user in the language they write in (usually Swedish).
 - The user is not a programmer: explain results and choices in plain words, and ask before installing software or changing Windows settings.

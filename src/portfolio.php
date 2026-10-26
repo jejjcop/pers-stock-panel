@@ -13,16 +13,26 @@ const TICKER_PATTERN = '/^[A-Z0-9][A-Z0-9.-]{0,9}$/';
 const PORTFOLIO_LISTS = ['owned', 'monitor'];
 const PORTFOLIO_MAX_STOCKS = 25;
 
-function portfolioPath(): string
+/**
+ * The folder with the user's data: the database, and the JSON files older
+ * versions saved. The tests point it at a temporary folder (with
+ * STOCK_PANEL_DATA_DIR) so they never touch the real data.
+ */
+function dataDirectory(): string
 {
-    // The browser tests point this at a temporary folder so they never touch
-    // the real data file.
     $directory = getenv('STOCK_PANEL_DATA_DIR');
     if (!is_string($directory) || $directory === '') {
         $directory = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'data';
     }
 
-    return $directory . DIRECTORY_SEPARATOR . 'portfolio.json';
+    return $directory;
+}
+
+// The file older versions saved the stocks to; now only read once, to copy
+// it into the database (php artisan stock-panel:import-json).
+function portfolioPath(): string
+{
+    return dataDirectory() . DIRECTORY_SEPARATOR . 'portfolio.json';
 }
 
 /**
@@ -122,46 +132,4 @@ function loadPortfolio(string $path): ?array
     }
 
     return normalizePortfolio($data);
-}
-
-/**
- * Saves the portfolio, keeping the previous version as a .bak file. The new
- * file is written next to the old one and then swapped in, so the saved file
- * is never left half-written.
- */
-function savePortfolio(string $path, array $portfolio): bool
-{
-    $directory = dirname($path);
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        return false;
-    }
-
-    $contents = json_encode(
-        [
-            'savedAt' => gmdate(DATE_ATOM),
-            'stocks' => $portfolio['stocks'],
-            // An object, so that no holdings is saved as {} rather than [].
-            'holdings' => (object) $portfolio['holdings'],
-        ],
-        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION
-    );
-
-    $temporaryPath = @tempnam($directory, 'portfolio');
-    if ($temporaryPath === false) {
-        return false;
-    }
-    if (@file_put_contents($temporaryPath, $contents . "\n", LOCK_EX) === false) {
-        @unlink($temporaryPath);
-        return false;
-    }
-
-    if (is_file($path)) {
-        @copy($path, $path . '.bak');
-    }
-    if (!@rename($temporaryPath, $path)) {
-        @unlink($temporaryPath);
-        return false;
-    }
-
-    return true;
 }

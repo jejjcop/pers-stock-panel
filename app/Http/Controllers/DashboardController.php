@@ -2,25 +2,23 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 use StockPanel\StockPanel;
 
 /**
- * The main page: your stock lists, built from data/portfolio.json.
+ * The main page: your stock lists, from the database.
  */
 class DashboardController extends Controller
 {
     // Only reached when logged in: the route's 'logged.in' middleware checks.
-    public function __invoke(): View
+    public function __invoke(Request $request): View
     {
-        $portfolioPath = portfolioPath();
-        $portfolio = loadPortfolio($portfolioPath);
-        $isNewPortfolio = $portfolio === null;
-        if ($isNewPortfolio && is_file($portfolioPath)) {
-            // Keep a damaged file instead of overwriting it with the starting stocks.
-            @rename($portfolioPath, $portfolioPath . '.invalid-' . date('Ymd-His'));
-        }
-        $portfolio ??= defaultPortfolio();
+        // The logged-in user, as a User model.
+        $user = $request->user();
+        $portfolio = $user->portfolio();
+        // Nothing saved yet: the page starts with the built-in stocks.
+        $isNewPortfolio = $user->portfolio_saved_at === null;
 
         // Names are known up front only for the built-in stocks; the others get
         // theirs with the first price refresh.

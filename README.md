@@ -12,7 +12,7 @@ A lightweight PHP web app starter for a stock market dashboard.
 - A small chart of each stock's price during regular trading hours, with the previous close as a dashed line
 - "Today's graphs": a larger graph for each stock in My current stocks, in the style of Perplexity's finance charts. Each spans the whole regular session, so the line fills in as the day goes on; it moves with every live trade, with a pulsing dot on the newest price, a shaded area under the line, and the previous close as a dotted line. Pointing at a graph shows the price and change at that time; the ticker opens the large chart
 - Add, move and remove stocks in either section
-- Stock lists, shares and costs are saved automatically to `data/portfolio.json`
+- Stock lists, shares and costs are saved automatically, to a database in the `data` folder
 - Live prices as trades happen, from Yahoo Finance's websocket stream (`public/price-stream.js`): during regular hours they update the price, today's change and your holdings, with a brief green or red flash; before and after hours they update the pre-market or after-hours price under it. The stream is unofficial; its messages are protobuf, decoded with field numbers from the open-source yfinance project
 - While prices stream, everything else (volume, charts, week and month, market hours) refreshes once a minute. Without the stream — it cannot be reached, drops, or goes quiet for 30 seconds with the market open — the page polls instead: every 5 seconds during regular trading hours, every 15 seconds during pre-market and after-hours trading, and every 2 minutes when nothing is trading (with an extra refresh as each session starts or ends), and keeps trying to reconnect
 - Pre-market and after-hours prices when extended-hours quotes are available
@@ -24,12 +24,14 @@ Requires PHP 8.2+ with the cURL extension enabled. Yahoo Finance is unofficial a
 
 ## Run locally
 
-The app is being moved to [Laravel](https://laravel.com) on the `laravel` branch. There, every address is a Laravel route in `routes/web.php`, answered by a controller in `app/Http/Controllers/`; the pages are Blade views in `resources/views/`. A middleware (`app/Http/Middleware/RequireLogin.php`) checks the login before every page and data address. The Yahoo Finance code and the data files are still the plain PHP in `src/`.
+The app is being moved to [Laravel](https://laravel.com) on the `laravel` branch. There, every address is a Laravel route in `routes/web.php`, answered by a controller in `app/Http/Controllers/`; the pages are Blade views in `resources/views/`. A middleware (`app/Http/Middleware/RequireLogin.php`) checks the login before every page and data address. The password and stocks are in a SQLite database, read and written through the Eloquent models in `app/Models/`; the tables are described by the migrations in `database/migrations/`. The Yahoo Finance code is still the plain PHP in `src/`.
 
 ```bash
 composer install
-cp .env.example .env          # first time only: Laravel's settings for this computer
-php artisan key:generate      # first time only: the secret key in .env
+cp .env.example .env              # first time only: Laravel's settings for this computer
+php artisan key:generate          # first time only: the secret key in .env
+php artisan migrate               # creates or updates the database's tables
+php artisan stock-panel:import-json   # copies what older versions saved (only once)
 cd public
 php -d opcache.enable=0 -S 127.0.0.1:8080 -t . ../vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php
 ```
@@ -60,26 +62,26 @@ If the page does not change after a push, check the log: it says when a version 
 
 ## Logging in
 
-The app is protected by a password. The first visit asks you to choose one; that is only allowed from the computer the app runs on (`127.0.0.1`), so nobody else can claim a freshly installed copy. The password is stored as a hash in `auth.json` next to `portfolio.json`, never in Git.
+The app is protected by a password. The first visit asks you to choose one; that is only allowed from the computer the app runs on (`127.0.0.1`), so nobody else can claim a freshly installed copy. The password is stored as a hash in the database (`data/database.sqlite`), never in Git.
 
 - A login lasts 30 days in the same browser and is extended every time you use the app. **Log out** ends it.
 - After 5 wrong passwords in a row, logging in pauses for 30 seconds, then for longer each time (up to 15 minutes).
 - The page and every data address (`/quotes`, `/history`, `/portfolio`) refuse requests without a login. An open page whose login has run out goes to the login page.
 - The login is kept in Laravel's session (`storage/framework/sessions`), and its cookie is never sent along with requests from other sites.
 - On a web host with HTTPS, set `SESSION_SECURE_COOKIE=true` in `.env` so the login cookie is only ever sent encrypted. The app itself does not provide HTTPS; a web host or a proxy in front of it does.
-- Forgot the password? Delete `data/auth.json` and open the app on this computer to choose a new one. Your stocks are not affected.
+- Forgot the password? Run `php artisan stock-panel:set-password` in the app's folder and type a new one. Your stocks are not affected.
 
 ## Your data
 
-Your stock lists, shares and average costs are saved to `data/portfolio.json` as you make changes, so they are the same in every browser on this computer. The previous version is kept as `data/portfolio.json.bak`. The `data` folder is not committed to Git.
+Your stock lists, shares and average costs are saved in a SQLite database, `data/database.sqlite`, as you make changes, so they are the same in every browser on this computer. The `data` folder is not committed to Git.
 
-- If `data/portfolio.json` does not exist, the page starts with the built-in stocks. The first time, it also copies in anything older versions of the app saved in that browser.
-- If the file is damaged, it is renamed to `portfolio.json.invalid-<date>` rather than overwritten, and the page starts with the built-in stocks.
+- Until anything has been saved, the page starts with the built-in stocks. The first time, it also copies in anything very old versions of the app saved in that browser.
+- Versions before the database saved to `data/portfolio.json` and `data/auth.json`. `php artisan stock-panel:import-json` copies them into the database once, when it has no password yet, and leaves the files as a backup.
 - Only the page itself can save: Laravel's CSRF protection refuses saves (`/portfolio`) that do not come from the app's own page.
 
 ## Tests
 
-The calculations behind the quote endpoint (previous close, week/month changes, pre-market and after-hours prices, chart points and market status) live in `src/quote_functions.php`, and saving and loading `data/portfolio.json` lives in `src/portfolio.php`. Both are covered by PHPUnit tests in `tests/`. The tests use made-up price data, so they do not contact Yahoo Finance and give the same result at any time of day.
+The calculations behind the quote endpoint (previous close, week/month changes, pre-market and after-hours prices, chart points and market status) live in `src/quote_functions.php`, and checking the stock lists the page sends lives in `src/portfolio.php`; both have PHPUnit tests in `tests/Unit/`. The Laravel parts (pages, login, saving, the database and the artisan commands) are tested in `tests/Feature/`, each test with a fresh database in memory. The tests use made-up price data, so they do not contact Yahoo Finance and give the same result at any time of day.
 
 ```bash
 composer install   # first time only
@@ -88,7 +90,7 @@ composer test
 
 ### Browser tests
 
-The page itself is tested in a real browser with [Playwright](https://playwright.dev/) (`tests/browser/`): prices and sorting, the holdings calculations and totals, the portfolio breakdown, adding, moving and removing stocks, and saving to the data file. The tests start their own copy of the app on port 8095, answer its Yahoo Finance requests with made-up prices, and save to a temporary folder (set through `STOCK_PANEL_DATA_DIR`), so they never touch `data/portfolio.json` or the network. Requires Node.js.
+The page itself is tested in a real browser with [Playwright](https://playwright.dev/) (`tests/browser/`): prices and sorting, the holdings calculations and totals, the portfolio breakdown, adding, moving and removing stocks, and saving. The tests start their own copy of the app on port 8095, answer its Yahoo Finance requests with made-up prices, and use a database in a temporary folder (set through `STOCK_PANEL_DATA_DIR`), so they never touch `data/` or the network. Requires Node.js.
 
 ```bash
 npm install                          # first time only

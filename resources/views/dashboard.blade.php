@@ -73,7 +73,7 @@
                     <span id="stream-status-text">Connecting to live prices...</span>
                 </p>
                 <p id="refresh-countdown" class="refresh-countdown" aria-live="off">Updating prices...</p>
-                <p id="save-status" class="save-status" role="status" aria-live="polite">Your stocks are saved automatically to data/portfolio.json.</p>
+                <p id="save-status" class="save-status" role="status" aria-live="polite">Your stocks are saved automatically on this computer.</p>
             </section>
 
             @foreach ($sections as $list => $section)
@@ -203,6 +203,6 @@
 
     <script id="portfolio-data" type="application/json">{!! json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) !!}</script>
     <script src="price-stream.js?v=1"></script>
-    <script src="app.js?v=37"></script>
+    <script src="app.js?v=38"></script>
 </body>
 </html>

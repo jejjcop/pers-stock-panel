@@ -6,7 +6,7 @@ const status = document.getElementById('watchlist-status');
 const refreshButton = document.getElementById('refresh-quotes');
 const refreshCountdown = document.getElementById('refresh-countdown');
 // Older versions kept everything in the browser under these keys. They are
-// only read once, to move that data into data/portfolio.json.
+// only read once, to move that data into the database on this computer.
 const legacyStocksKey = 'stock-panel-added-tickers';
 const legacyHoldingsKey = 'stock-panel-holdings';
 const legacyMigratedKey = 'stock-panel-moved-to-data-file';
@@ -154,7 +154,7 @@ function showSaveStatus(message, isError = false) {
     saveStatus.classList.toggle('is-error', isError);
 }
 
-// What gets saved to data/portfolio.json: every stock with its section, and
+// What gets saved to the database: every stock with its section, and
 // the shares and costs of the stocks still on the page.
 function portfolioState() {
     const stocks = allRows().map((row) => ({
@@ -209,7 +209,7 @@ async function savePortfolio() {
         }
 
         const savedAt = new Date(result.savedAt || Date.now()).toLocaleTimeString();
-        showSaveStatus(`All changes saved to data/portfolio.json at ${savedAt}.`);
+        showSaveStatus(`All changes saved at ${savedAt}.`);
         markBrowserDataMoved();
     } catch (error) {
         showSaveStatus(`Your latest changes are not saved yet: ${error.message} Trying again in ${saveRetryDelayMs / 1000} seconds.`, true);
@@ -1889,7 +1889,7 @@ function initializeStocks() {
 
     if (pageData.isNew) {
         if (browserData.found) {
-            showSaveStatus('Copying the stocks, shares and costs saved in this browser to data/portfolio.json...');
+            showSaveStatus('Copying the stocks, shares and costs saved in this browser to this computer...');
         }
         scheduleSave();
     }

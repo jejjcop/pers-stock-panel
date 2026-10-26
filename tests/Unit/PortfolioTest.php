@@ -5,7 +5,8 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * Checking, saving and loading data/portfolio.json.
+ * Checking the stock lists the page sends, and reading data/portfolio.json,
+ * which older versions saved them to.
  */
 final class PortfolioTest extends TestCase
 {
@@ -87,37 +88,19 @@ final class PortfolioTest extends TestCase
         self::assertSame(['123' => ['shares' => 2.0, 'cost' => null]], $portfolio['holdings']);
     }
 
-    public function testSavedPortfolioLoadsBackUnchanged(): void
+    public function testLoadsAFileOlderVersionsSaved(): void
     {
-        $portfolio = normalizePortfolio([
+        mkdir($this->directory);
+        file_put_contents($this->path(), json_encode([
+            'savedAt' => '2026-10-01T12:00:00+00:00',
             'stocks' => [['ticker' => 'MU', 'list' => 'owned']],
             'holdings' => ['MU' => ['shares' => 19, 'cost' => 989.5]],
-        ]);
+        ]));
 
-        self::assertTrue(savePortfolio($this->path(), $portfolio));
-        self::assertSame($portfolio, loadPortfolio($this->path()));
-    }
-
-    public function testEmptyHoldingsAreSavedAsAJsonObject(): void
-    {
-        savePortfolio($this->path(), defaultPortfolio());
-
-        $saved = json_decode((string) file_get_contents($this->path()));
-
-        self::assertInstanceOf(stdClass::class, $saved->holdings);
-        self::assertSame(['AAPL', 'MSFT', 'NVDA', 'AMZN', 'META'], array_column(loadPortfolio($this->path())['stocks'], 'ticker'));
-    }
-
-    public function testSavingKeepsThePreviousVersionAsABackup(): void
-    {
-        $first = normalizePortfolio(['stocks' => [['ticker' => 'MU', 'list' => 'owned']]]);
-        $second = normalizePortfolio(['stocks' => [['ticker' => 'NVDA', 'list' => 'owned']]]);
-
-        savePortfolio($this->path(), $first);
-        savePortfolio($this->path(), $second);
-
-        self::assertSame($second, loadPortfolio($this->path()));
-        self::assertSame($first, loadPortfolio($this->path() . '.bak'));
+        self::assertSame(
+            ['stocks' => [['ticker' => 'MU', 'list' => 'owned']], 'holdings' => ['MU' => ['shares' => 19.0, 'cost' => 989.5]]],
+            loadPortfolio($this->path())
+        );
     }
 
     public function testMissingOrDamagedFilesLoadAsNull(): void

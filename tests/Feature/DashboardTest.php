@@ -2,27 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
-use Tests\UsesTemporaryDataFolder;
 
 /**
  * The main page, sent through Laravel the way a browser request would be.
  */
 class DashboardTest extends TestCase
 {
-    use UsesTemporaryDataFolder;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->setUpDataFolder();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->tearDownDataFolder();
-        parent::tearDown();
-    }
+    // Every test starts with an empty database (in memory, never the real one).
+    use RefreshDatabase;
 
     public function testSendsYouToTheLoginPageUntilYouLogIn(): void
     {
@@ -31,23 +21,34 @@ class DashboardTest extends TestCase
 
     public function testShowsYourStocksOnceLoggedIn(): void
     {
-        $this->writeDataFile('portfolio.json', [
+        $user = User::factory()->create();
+        $user->savePortfolio(normalizePortfolio([
             'stocks' => [['ticker' => 'MU', 'list' => 'owned'], ['ticker' => 'NVDA', 'list' => 'monitor']],
             'holdings' => ['MU' => ['shares' => 19, 'cost' => 989.5]],
-        ]);
+        ]));
 
-        // withSession() starts the request with this in Laravel's session,
-        // as if the browser had logged in before.
-        $response = $this->withSession(['logged_in' => true])->get('/');
+        // actingAs() sends the request as this user, as if logged in.
+        $response = $this->actingAs($user)->get('/');
 
         $response->assertOk();
         $response->assertViewIs('dashboard');
         $response->assertSee('My current stocks');
         $response->assertSee('Stocks to monitor');
         // The data public/app.js builds the table rows from.
+        $pageData = $response->viewData('pageData');
+        $this->assertFalse($pageData['isNew']);
         $this->assertSame(
             [['ticker' => 'MU', 'list' => 'owned', 'name' => null], ['ticker' => 'NVDA', 'list' => 'monitor', 'name' => 'NVIDIA Corp.']],
-            $response->viewData('pageData')['stocks']
+            $pageData['stocks']
         );
+        $this->assertEquals((object) ['MU' => ['shares' => 19.0, 'cost' => 989.5]], $pageData['holdings']);
+    }
+
+    public function testStartsWithTheBuiltInStocksUntilSomethingIsSaved(): void
+    {
+        $pageData = $this->actingAs(User::factory()->create())->get('/')->viewData('pageData');
+
+        $this->assertTrue($pageData['isNew']);
+        $this->assertSame(['AAPL', 'MSFT', 'NVDA', 'AMZN', 'META'], array_column($pageData['stocks'], 'ticker'));
     }
 }

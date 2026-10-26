@@ -4,7 +4,7 @@ namespace Tests;
 
 /**
  * Points the app at an empty data folder of the test's own, so tests never
- * touch data/portfolio.json or data/auth.json.
+ * touch the real files in data/.
  */
 trait UsesTemporaryDataFolder
 {
@@ -29,14 +29,8 @@ trait UsesTemporaryDataFolder
         return $this->dataDirectory . DIRECTORY_SEPARATOR . $name;
     }
 
-    protected function writeDataFile(string $name, array $data): void
+    protected function writeDataFile(string $name, string|array $contents): void
     {
-        file_put_contents($this->dataFile($name), json_encode($data));
-    }
-
-    /** Sets up auth.json with this password, as if it had been chosen before. */
-    protected function choosePassword(string $password): void
-    {
-        $this->writeDataFile('auth.json', ['passwordHash' => password_hash($password, PASSWORD_DEFAULT), 'failedAttempts' => 0, 'lockedUntil' => 0]);
+        file_put_contents($this->dataFile($name), is_array($contents) ? json_encode($contents) : $contents);
     }
 }

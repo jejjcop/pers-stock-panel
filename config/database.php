@@ -35,7 +35,9 @@ return [
         'sqlite' => [
             'driver' => 'sqlite',
             'url' => env('DB_URL'),
-            'database' => env('DB_DATABASE', database_path('database.sqlite')),
+            // In the data folder next to the user's other data, unless
+            // DB_DATABASE says otherwise (the PHP tests use ':memory:').
+            'database' => env('DB_DATABASE') ?: dataDirectory() . DIRECTORY_SEPARATOR . 'database.sqlite',
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
             'busy_timeout' => null,

@@ -85,7 +85,8 @@ test.describe('logging in', () => {
     });
 
     test('lets you choose a password on the first visit', async ({ page }) => {
-        writePortfolio({ stocks: [{ ticker: 'MU', list: 'owned' }] }, { withPassword: false });
+        // A fresh install: no password and no stocks saved yet.
+        writePortfolio(null, { withPassword: false });
         await page.goto('/');
 
         await expect(page.getByRole('heading', { name: 'Choose a password' })).toBeVisible();
@@ -99,7 +100,10 @@ test.describe('logging in', () => {
         await page.getByLabel('The same password again').fill('my new password');
         await page.getByRole('button', { name: 'Save password and log in' }).click();
 
-        await expect(row(page, 'MU').locator('.quote-price')).toHaveText('$1,088.00');
+        // The app opens with the built-in stocks, and saves them. (Waiting for
+        // that save keeps it from reaching the server during the next test.)
+        await expect(row(page, 'AAPL').locator('.quote-price')).toHaveText('$336.67');
+        await expect(page.locator('#save-status')).toHaveText(/^All changes saved at /);
         // Only a hash of the password is stored, never the password itself.
         expect(readAuth().passwordHash).toMatch(/^\$2y\$/);
         expect(JSON.stringify(readAuth())).not.toContain('my new password');

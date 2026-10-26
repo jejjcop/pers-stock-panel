@@ -1,7 +1,7 @@
 // @ts-check
 const { test, expect, writePortfolio, readPortfolio, savedStocks, tickersIn, row, addStock, createStream, stubYahoo, logIn } = require('./helpers');
 
-test.describe('saving to data/portfolio.json', () => {
+test.describe('saving', () => {
     test.beforeEach(() => {
         writePortfolio({
             stocks: [
@@ -21,7 +21,7 @@ test.describe('saving to data/portfolio.json', () => {
         await expect(row(page, 'TSLA')).toBeVisible();
         expect(await tickersIn(page, 'monitor')).toContain('TSLA');
         await expect.poll(savedStocks).toContain('TSLA/monitor');
-        await expect(page.locator('#save-status')).toHaveText(/^All changes saved to data\/portfolio\.json/);
+        await expect(page.locator('#save-status')).toHaveText(/^All changes saved at /);
     });
 
     test('moves a stock to the other section and keeps its shares', async ({ page }) => {
@@ -116,7 +116,7 @@ test.describe('saving to data/portfolio.json', () => {
     });
 });
 
-test.describe('the first visit, before there is a data file', () => {
+test.describe('the first visit, before anything is saved', () => {
     test.beforeEach(() => {
         writePortfolio(null);
     });

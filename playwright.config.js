@@ -7,10 +7,14 @@ const port = 8095;
 // The app saves to this folder instead of data/ while the tests run.
 const dataDir = path.join(os.tmpdir(), 'pers-stock-panel-browser-tests');
 process.env.STOCK_PANEL_TEST_DATA_DIR = dataDir;
+// An empty database with all tables, made once by global-setup.js; each
+// test starts from a copy.
+process.env.STOCK_PANEL_TEST_TEMPLATE_DIR = path.join(os.tmpdir(), 'pers-stock-panel-browser-tests-template');
 
 module.exports = defineConfig({
     testDir: './tests/browser',
-    // The tests share one data file, so they run one at a time.
+    globalSetup: './tests/browser/global-setup.js',
+    // The tests share one database, so they run one at a time.
     workers: 1,
     fullyParallel: false,
     forbidOnly: Boolean(process.env.CI),
