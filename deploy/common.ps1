@@ -8,6 +8,8 @@ $InstallRoot = Join-Path $env:LOCALAPPDATA 'PersStockPanel'
 $AppDir = Join-Path $InstallRoot 'app'
 $LogFile = Join-Path $InstallRoot 'deploy.log'
 $SettingsFile = Join-Path $InstallRoot 'settings.json'
+# The version (commit) of the installed copy that prepare.ps1 last finished.
+$PreparedFile = Join-Path $InstallRoot 'prepared.txt'
 $Repository = 'jejjcop/pers-stock-panel'
 $ServerTaskName = 'Pers Stock Panel - server'
 $UpdateTaskName = 'Pers Stock Panel - update'
@@ -74,4 +76,60 @@ function Invoke-Git([string[]] $Arguments) {
 
 function Test-PortInUse([int] $Port) {
     return [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+}
+
+# Stops the installed app's PHP server, and only that one.
+function Stop-InstalledServer {
+    if (Get-ScheduledTask -TaskName $ServerTaskName -ErrorAction SilentlyContinue) {
+        Stop-ScheduledTask -TaskName $ServerTaskName
+    }
+    $installedPublic = Join-Path $AppDir 'public'
+    Get-CimInstance Win32_Process -Filter "Name = 'php.exe'" |
+        Where-Object { $_.CommandLine -like "*$installedPublic*" } |
+        ForEach-Object {
+            Stop-Process -Id $_.ProcessId -Force -Confirm:$false
+            Write-Log "Stopped the installed server (process $($_.ProcessId))."
+        }
+}
+
+function Restart-InstalledServer {
+    Stop-InstalledServer
+    $port = (Read-Settings).Port
+    for ($i = 0; $i -lt 20 -and (Test-PortInUse $port); $i++) {
+        Start-Sleep -Milliseconds 250
+    }
+    Start-ScheduledTask -TaskName $ServerTaskName
+    Write-Log "Restarted the server on http://127.0.0.1:$port."
+}
+
+# Runs the installed version's prepare.ps1 unless that version is already
+# prepared, then restarts the server if the way it is started has changed.
+# A preparation that fails is tried again on the next update.
+function Initialize-InstalledApp {
+    $script = Join-Path $AppDir 'deploy\prepare.ps1'
+    if (-not (Test-Path $script)) {
+        return  # a version from before Laravel, which needs no preparing
+    }
+    $head = "$(Invoke-Git @('-C', $AppDir, 'rev-parse', 'HEAD'))".Trim()
+    $prepared = if (Test-Path $PreparedFile) { (Get-Content -Raw -Path $PreparedFile).Trim() } else { '' }
+    if ($prepared -eq $head) {
+        return
+    }
+
+    $powershell = Join-Path $PSHOME 'powershell.exe'
+    Invoke-Tool $powershell 'prepare.ps1' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script) | Out-Null
+
+    # Without a known earlier version, the server may still run the way an
+    # older version started it.
+    $restart = $true
+    if ($prepared) {
+        try {
+            $changed = Invoke-Git @('-C', $AppDir, 'diff', '--name-only', $prepared, $head, '--', 'deploy/start-server.ps1')
+            $restart = [bool]($changed | Where-Object { $_ })
+        } catch {}
+    }
+    if ($restart -and (Get-ScheduledTask -TaskName $ServerTaskName -ErrorAction SilentlyContinue)) {
+        Restart-InstalledServer
+    }
+    Set-Content -Path $PreparedFile -Value $head -Encoding ascii
 }

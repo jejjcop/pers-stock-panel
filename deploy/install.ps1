@@ -35,6 +35,11 @@ if (-not (Test-Path (Join-Path $AppDir 'deploy\start-server.ps1'))) {
     ConvertTo-Json | Set-Content -Path $SettingsFile -Encoding utf8
 Write-Log "Settings saved: data in $DataDir, port $Port."
 
+# Laravel's libraries, settings file and database. Forgetting the prepared
+# version makes it run again, e.g. for a new data folder.
+Remove-Item -Path $PreparedFile -ErrorAction SilentlyContinue
+Initialize-InstalledApp
+
 # conhost --headless runs the scripts without a console window popping up.
 $powershell = Join-Path $PSHOME 'powershell.exe'
 function New-HiddenAction([string] $Script) {

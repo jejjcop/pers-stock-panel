@@ -14,11 +14,4 @@ foreach ($taskName in @($ServerTaskName, $UpdateTaskName)) {
     }
 }
 
-# Stop the installed app's PHP server, and only that one.
-$installedPublic = Join-Path $AppDir 'public'
-Get-CimInstance Win32_Process -Filter "Name = 'php.exe'" |
-    Where-Object { $_.CommandLine -like "*$installedPublic*" } |
-    ForEach-Object {
-        Stop-Process -Id $_.ProcessId -Force -Confirm:$false
-        Write-Log "Stopped the installed server (process $($_.ProcessId))."
-    }
+Stop-InstalledServer

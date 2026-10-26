@@ -45,9 +45,9 @@ Laravel needs the PHP extensions `fileinfo`, `mbstring` and `openssl`, and Compo
 The app you use day to day runs from an installed copy in `%LOCALAPPDATA%\PersStockPanel\app`, not from this working folder, so unfinished changes here never reach it. Two Windows scheduled tasks look after it:
 
 - **Pers Stock Panel - server** starts the app on http://127.0.0.1:8080 when you log in, without a window.
-- **Pers Stock Panel - update** checks GitHub every 15 minutes and installs a new version once its tests have passed on GitHub Actions. Versions whose tests fail are skipped.
+- **Pers Stock Panel - update** checks GitHub every 15 minutes and installs a new version once its tests have passed on GitHub Actions. Versions whose tests fail are skipped. After installing, it runs `deploy\prepare.ps1`: Laravel's libraries (`composer install`), its settings file and secret key (`.env`, created once, with error details off), the database's tables, and once the import of what older versions saved as JSON. A preparation that fails is tried again on the next check, and the server is restarted when the way it is started has changed.
 
-The installed copy uses this project's `data` folder for `portfolio.json`, so OneDrive keeps backing it up.
+The installed copy uses this project's `data` folder for its database (`database.sqlite`), so OneDrive keeps backing it up.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy\install.ps1     # set up (again)

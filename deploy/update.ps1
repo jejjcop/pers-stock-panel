@@ -10,6 +10,9 @@ try {
     $installed = "$(Invoke-Git @('-C', $AppDir, 'rev-parse', 'HEAD'))".Trim()
     $newest = "$(Invoke-Git @('-C', $AppDir, 'rev-parse', 'origin/main'))".Trim()
     if ($installed -eq $newest) {
+        # Finishes a version whose preparation failed, or that an older
+        # update script installed without preparing it.
+        Initialize-InstalledApp
         exit 0
     }
 
@@ -33,6 +36,7 @@ try {
     # straight forward to the new version.
     Invoke-Git @('-C', $AppDir, 'merge', '--ff-only', '--quiet', 'origin/main') | Out-Null
     $subject = "$(Invoke-Git @('-C', $AppDir, 'log', '-1', '--format=%s'))".Trim()
+    Initialize-InstalledApp
     Write-Log "Installed version $short ($subject). The page shows it after a reload."
 }
 catch {

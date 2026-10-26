@@ -18,9 +18,11 @@ Write-Log "Starting the server on http://127.0.0.1:$($settings.Port) with data i
 # script, so errors only continue here.
 $ErrorActionPreference = 'Continue'
 # Laravel's router script sends every address that is not a file in public/
-# to Laravel. OPcache is off: in PHP 8.5.11's built-in server it makes calls
-# to mb_* functions reach the wrong function once the fileinfo extension
-# (which Laravel needs) is loaded.
+# to Laravel. It runs from public/, as Laravel expects: it looks for
+# index.php in the folder it was started from. OPcache is off: in PHP
+# 8.5.11's built-in server it makes calls to mb_* functions reach the wrong
+# function once the fileinfo extension (which Laravel needs) is loaded.
+Set-Location (Join-Path $AppDir 'public')
 $router = Join-Path $AppDir 'vendor\laravel\framework\src\Illuminate\Foundation\resources\server.php'
 & $Php -d opcache.enable=0 -S "127.0.0.1:$($settings.Port)" -t (Join-Path $AppDir 'public') $router 2>&1 | Out-Null
 Write-Log "The server stopped (exit code $LASTEXITCODE)."
