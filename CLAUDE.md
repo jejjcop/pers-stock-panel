@@ -1,6 +1,6 @@
 # Pers Stock Panel
 
-A personal stock dashboard: PHP 8.5 on the server, being moved to Laravel 13 on the `laravel` branch (`app/`, `routes/`, `resources/views/`; the Yahoo Finance and data-file code is still plain PHP in `src/`), plain JavaScript and CSS in the browser (`public/app.js`, `public/styles.css`). Prices come from Yahoo Finance's unofficial chart endpoint. See README.md for features and how it is built.
+A personal stock dashboard: PHP 8.5 on the server, being moved to Laravel 13 on the `laravel` branch (`app/`, `routes/`, `resources/views/`; the calculations on Yahoo's data are plain functions in `src/quote_functions.php`), plain JavaScript and CSS in the browser (`public/app.js`, `public/styles.css`). Prices come from Yahoo Finance's unofficial chart endpoint. See README.md for features and how it is built.
 
 ## Testing — required after every code change
 

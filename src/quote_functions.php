@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-// Calculations and Yahoo Finance helpers used by public/quotes.php. They are
-// kept here, separate from the endpoint, so they can be unit tested.
+// Calculations on Yahoo Finance chart data, used by app/Services/QuoteBoard.php
+// and HistoryController. They are plain functions, so they can be unit tested.
 
 function periodChangePct(array $timestamps, array $closes, float $price, int $marketTime, int $days): ?float
 {
@@ -225,54 +225,6 @@ function marketStatus(array $periods, string $timezone, string $exchange, int $n
     ];
 }
 
-// Three months of daily closes only change once a day, so they are cached
-// briefly on disk instead of being downloaded on every refresh.
-const DAILY_CACHE_SECONDS = 300;
-// Exchange rates are shown as an approximation, so a minute old is fine.
-const FX_CACHE_SECONDS = 60;
-
-/**
- * A cached Yahoo chart response. $kind names the folder, e.g. 'daily', and
- * $key the file within it; both only ever contain letters, digits, dots,
- * hyphens and '=' (from validated tickers), so they are safe as file names.
- */
-function chartCachePath(string $kind, string $key): string
-{
-    return sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'stock-panel-' . $kind . DIRECTORY_SEPARATOR . $key . '.json';
-}
-
-function readChartCache(string $kind, string $key, int $maxAgeSeconds): ?array
-{
-    $path = chartCachePath($kind, $key);
-    $modified = @filemtime($path);
-    if ($modified === false || time() - $modified >= $maxAgeSeconds) {
-        return null;
-    }
-
-    $body = @file_get_contents($path);
-
-    return $body === false ? null : chartResult($body);
-}
-
-function writeChartCache(string $kind, string $key, string $body): void
-{
-    $path = chartCachePath($kind, $key);
-    $directory = dirname($path);
-    if (!is_dir($directory) && !@mkdir($directory, 0775, true) && !is_dir($directory)) {
-        return;
-    }
-
-    // Write to a temporary file first so a parallel request never reads a
-    // half-written cache file.
-    $temporaryPath = @tempnam($directory, 'chart');
-    if ($temporaryPath === false) {
-        return;
-    }
-    if (@file_put_contents($temporaryPath, $body) === false || !@rename($temporaryPath, $path)) {
-        @unlink($temporaryPath);
-    }
-}
-
 /**
  * Returns the chart result from a Yahoo chart response, or null when the
  * response is not usable.
@@ -302,68 +254,6 @@ function chartSeries(array $result): array
         : [];
 
     return [$timestamps, $closes];
-}
-
-/**
- * A request for Yahoo's chart data for one symbol, set up the way Yahoo
- * accepts it. $query is e.g. 'range=1d&interval=1m'.
- */
-function yahooChartRequest(string $symbol, string $query): CurlHandle
-{
-    $handle = curl_init('https://query1.finance.yahoo.com/v8/finance/chart/' . rawurlencode($symbol) . '?' . $query);
-    $options = [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS => 3,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 12,
-        CURLOPT_ENCODING => '',
-        CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
-        CURLOPT_HTTPHEADER => [
-            'Accept: application/json',
-            'Referer: https://finance.yahoo.com/',
-        ],
-    ];
-    if (PHP_OS_FAMILY === 'Windows' && defined('CURLSSLOPT_NATIVE_CA')) {
-        $options[CURLOPT_SSL_OPTIONS] = CURLSSLOPT_NATIVE_CA;
-    }
-    curl_setopt_array($handle, $options);
-
-    return $handle;
-}
-
-/**
- * Runs requests in parallel and returns each one's finishRequest() result,
- * keyed like $handles.
- *
- * @param array<string, CurlHandle> $handles
- * @return array<string, array{result: ?array, body: ?string, error: ?string}>
- */
-function runRequests(array $handles, bool &$rateLimited): array
-{
-    if ($handles === []) {
-        return [];
-    }
-
-    $multiHandle = curl_multi_init();
-    foreach ($handles as $handle) {
-        curl_multi_add_handle($multiHandle, $handle);
-    }
-
-    do {
-        $multiStatus = curl_multi_exec($multiHandle, $running);
-        if ($running && $multiStatus === CURLM_OK && curl_multi_select($multiHandle, 1.0) === -1) {
-            usleep(10_000);
-        }
-    } while ($running && $multiStatus === CURLM_OK);
-
-    $responses = [];
-    foreach ($handles as $key => $handle) {
-        $responses[$key] = finishRequest($handle, $multiHandle, $multiStatus, $rateLimited);
-    }
-    curl_multi_close($multiHandle);
-
-    return $responses;
 }
 
 /**
@@ -431,38 +321,4 @@ function historyPoints(array $chartResult): array
     }
 
     return $points;
-}
-
-/**
- * Collects one finished request from the multi handle.
- *
- * @return array{result: ?array, body: ?string, error: ?string}
- */
-function finishRequest(CurlHandle $handle, CurlMultiHandle $multiHandle, int $multiStatus, bool &$rateLimited): array
-{
-    $body = (string) curl_multi_getcontent($handle);
-    $httpStatus = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
-    $networkError = curl_error($handle);
-    curl_multi_remove_handle($multiHandle, $handle);
-
-    $failure = static fn (string $error): array => ['result' => null, 'body' => null, 'error' => $error];
-    if ($multiStatus !== CURLM_OK) {
-        return $failure('The quote request did not complete.');
-    }
-    if ($networkError !== '') {
-        return $failure('Network error while contacting Yahoo Finance.');
-    }
-    if ($httpStatus === 429) {
-        $rateLimited = true;
-        return $failure('Yahoo Finance is temporarily rate-limiting requests.');
-    }
-    if ($httpStatus !== 200) {
-        return $failure("Yahoo Finance returned HTTP {$httpStatus}.");
-    }
-
-    $result = chartResult($body);
-
-    return $result === null
-        ? $failure('Yahoo Finance returned an unexpected response.')
-        : ['result' => $result, 'body' => $body, 'error' => null];
 }
