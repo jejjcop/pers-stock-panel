@@ -7,7 +7,7 @@
     <title>Pers Stock Panel</title>
     {{-- For public/app.js: the token Laravel checks on requests that save. --}}
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <link rel="stylesheet" href="styles.css?v=22">
+    <link rel="stylesheet" href="styles.css?v=23">
 </head>
 <body>
     <div class="page-shell">
@@ -161,6 +161,25 @@
                     </section>
                 @endif
             @endforeach
+
+            {{-- Questions to Claude; public/assistant.js runs it. --}}
+            <section id="assistant-panel" class="panel assistant-panel" aria-labelledby="assistant-title">
+                <div class="panel-header">
+                    <div>
+                        <p class="eyebrow">Claude</p>
+                        <h2 id="assistant-title">Ask about my stocks</h2>
+                    </div>
+                    <button id="assistant-reset" class="secondary-button" type="button" hidden>New conversation</button>
+                </div>
+                <p class="assistant-note">Claude can look up your stocks, their price history and the news. An answer can take up to a minute, and each one costs a little at Anthropic.</p>
+                <div id="assistant-log" class="assistant-log" aria-live="polite" hidden></div>
+                <form id="assistant-form" class="assistant-form">
+                    <label class="visually-hidden" for="assistant-question">Question</label>
+                    <textarea id="assistant-question" name="question" rows="2" maxlength="2000" placeholder="e.g. Why did Nvidia move today?" required></textarea>
+                    <button class="primary-button" type="submit">Ask</button>
+                </form>
+                <p id="assistant-status" class="assistant-status" role="status"></p>
+            </section>
         </main>
     </div>
 
@@ -204,5 +223,6 @@
     <script id="portfolio-data" type="application/json">{!! json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) !!}</script>
     <script src="price-stream.js?v=1"></script>
     <script src="app.js?v=38"></script>
+    <script src="assistant.js?v=1"></script>
 </body>
 </html>

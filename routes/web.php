@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HistoryController;
 use App\Http\Controllers\LoginController;
@@ -23,4 +24,7 @@ Route::middleware('logged.in:json')->group(function () {
     Route::get('/quotes', QuoteController::class);
     Route::get('/history', HistoryController::class);
     Route::post('/portfolio', [PortfolioController::class, 'store']);
+    Route::get('/assistant', [AssistantController::class, 'show']);
+    Route::post('/assistant', [AssistantController::class, 'store']);
+    Route::delete('/assistant', [AssistantController::class, 'destroy']);
 });

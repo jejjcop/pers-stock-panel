@@ -1159,3 +1159,103 @@ th.day-column {
     stroke-width: 1;
     opacity: 0.6;
 }
+
+/* "Ask about my stocks": questions to Claude (public/assistant.js). */
+.assistant-note {
+    margin: -8px 0 18px;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.assistant-log {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 520px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+    padding-right: 4px;
+}
+
+.assistant-message {
+    max-width: min(760px, 90%);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: var(--panel-soft);
+}
+
+.assistant-message.is-user {
+    align-self: flex-end;
+    background: rgba(96, 165, 250, 0.14);
+    border-color: rgba(96, 165, 250, 0.35);
+}
+
+.assistant-message-label {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.assistant-message-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+}
+
+.assistant-sources {
+    margin: 10px 0 0;
+    padding-left: 18px;
+    font-size: 0.82rem;
+}
+
+.assistant-sources a {
+    color: var(--blue);
+}
+
+.assistant-form {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.assistant-form textarea {
+    flex: 1;
+    min-height: 46px;
+    resize: vertical;
+    border: 1px solid var(--line);
+    background: rgba(15, 23, 42, 0.9);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: var(--text);
+    font: inherit;
+}
+
+.assistant-form button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.assistant-status {
+    min-height: 1.2em;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.assistant-status.is-error {
+    color: var(--danger);
+}
+
+@media (max-width: 640px) {
+    .assistant-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .assistant-message {
+        max-width: 100%;
+    }
+}

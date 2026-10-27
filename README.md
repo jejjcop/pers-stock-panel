@@ -18,6 +18,7 @@ A lightweight PHP web app starter for a stock market dashboard.
 - Pre-market and after-hours prices when extended-hours quotes are available
 - Market status badge (open, pre-market, after-hours or closed) with a countdown to the next open or close; it follows the US market when you track any US stock, and does not know about exchange holidays when counting down over a weekend
 - Refreshes slow down automatically (up to every 2 minutes) if Yahoo Finance rate-limits requests or the quote service fails, and return to normal once a refresh succeeds
+- "Ask about my stocks": questions to Claude, Anthropic's AI, in any language (`app/Services/StockAssistant.php`, `public/assistant.js`). Claude can read your stock lists and holdings with current prices, look up a stock's price history and search the web for news, and lists the pages it cites. The conversation is kept for a day; "New conversation" starts over. It uses Claude Opus 5.5 at low effort, with Anthropic's server-side fallback in case a question is declined. Needs an API key (see below); each answer costs a little: roughly a krona, a few kronor when Claude searches the web, with the repeated part of long conversations cached to keep it down. While Claude answers, the page's own price checks wait (PHP's built-in server answers one request at a time), but the live price stream carries on
 - Quotes are fetched server-side (`/quotes`, built by `app/Services/QuoteBoard.php`), with all of a refresh's requests to Yahoo sent at the same time through Laravel's HTTP client (`app/Services/YahooFinance.php`). Each refresh downloads only today's 1-minute data; the 3-month daily history (used for the previous close and week/month changes) is kept in Laravel's cache for 5 minutes, exchange rates for 1 minute and the large chart's history for 1 to 60 minutes
 
 Requires PHP 8.3+ with the cURL extension enabled. Secure connections to Yahoo use the computer's list of trusted certificates, or on Windows (where PHP's cURL finds none) the copy in the `composer/ca-bundle` package. Yahoo Finance is unofficial and may delay or block quote requests, especially at five-second polling intervals. Day change uses the latest quote against the prior trading day's close; week and month changes use the latest quote against the latest available daily close at least 7 or 30 calendar days earlier. Extended-hours prices are the latest available 1-minute close within that day's pre-market and after-hours sessions.
@@ -39,6 +40,12 @@ php -d opcache.enable=0 -S 127.0.0.1:8080 -t . ../vendor/laravel/framework/src/I
 Then open http://127.0.0.1:8080 in your browser. The last line is PHP's built-in web server with Laravel's router script, which sends every address that is not a file in `public/` to Laravel. OPcache is turned off there because in PHP 8.5.11 it makes calls to `mb_*` functions reach the wrong function once the `fileinfo` extension, which Laravel needs, is loaded.
 
 Laravel needs the PHP extensions `fileinfo`, `mbstring` and `openssl`, and Composer needs `zip`.
+
+### Setting up "Ask about my stocks"
+
+1. Create an account at https://console.anthropic.com, add some credit under **Billing** (a few dollars lasts a long time), and create a key under **API keys**.
+2. Put it in the `.env` file of the copy that should use it: `ANTHROPIC_API_KEY=sk-ant-...`. For the installed app that is `%LOCALAPPDATA%\PersStockPanel\app\.env`; updates keep it.
+3. Reload the page. The key stays on this computer: `.env` is never sent to GitHub, and the tests never use it.
 
 ## Automatic updates on this PC (continuous deployment)
 
