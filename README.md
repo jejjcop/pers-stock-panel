@@ -107,4 +107,4 @@ npm run test:browser
 
 ### On GitHub
 
-GitHub Actions runs everything on every push (`.github/workflows/tests.yml`): a syntax check of all PHP files and `public/app.js`, the PHPUnit tests, and the browser tests. Results are on the repository's **Actions** tab; when a browser test fails, its report is attached to the run.
+GitHub Actions runs everything on every push (`.github/workflows/tests.yml`): a syntax check of all PHP files and `public/app.js`, a check of the PHP and JavaScript libraries for published security holes (`composer audit`, `npm audit`), the PHPUnit tests, and the browser tests. Results are on the repository's **Actions** tab; when a browser test fails, its report is attached to the run.

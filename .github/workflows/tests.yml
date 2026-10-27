@@ -27,6 +27,11 @@ jobs:
       - name: Install Laravel, PHPUnit and other dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
+      # Fails when a PHP library the app uses has a published security hole,
+      # so that version is not installed on the PC until it is updated.
+      - name: Check the PHP libraries for known security holes
+        run: composer audit
+
       - name: Create Laravel's settings file and secret key
         run: cp .env.example .env && php artisan key:generate
 
@@ -66,6 +71,10 @@ jobs:
 
       - name: Install Playwright
         run: npm ci
+
+      # The same for the JavaScript test tools (they never reach the PC's app).
+      - name: Check the JavaScript libraries for known security holes
+        run: npm audit
 
       - name: Install the test browser
         run: npx playwright install --with-deps chromium
