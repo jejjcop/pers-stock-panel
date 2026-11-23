@@ -3,13 +3,15 @@ const path = require('node:path');
 const os = require('node:os');
 const { defineConfig, devices } = require('@playwright/test');
 
-const port = 8095;
-// The app saves to this folder instead of data/ while the tests run.
-const dataDir = path.join(os.tmpdir(), 'pers-stock-panel-browser-tests');
+// The agent factory gives each parallel run its own port; 8095 when run normally.
+const port = Number(process.env.STOCK_PANEL_TEST_PORT || 8095);
+// Separate temp folders per port, so parallel runs never share a database.
+const suffix = port === 8095 ? '' : `-${port}`;
+const dataDir = path.join(os.tmpdir(), `pers-stock-panel-browser-tests${suffix}`);
 process.env.STOCK_PANEL_TEST_DATA_DIR = dataDir;
 // An empty database with all tables, made once by global-setup.js; each
 // test starts from a copy.
-process.env.STOCK_PANEL_TEST_TEMPLATE_DIR = path.join(os.tmpdir(), 'pers-stock-panel-browser-tests-template');
+process.env.STOCK_PANEL_TEST_TEMPLATE_DIR = path.join(os.tmpdir(), `pers-stock-panel-browser-tests-template${suffix}`);
 
 module.exports = defineConfig({
     testDir: './tests/browser',
@@ -41,8 +43,10 @@ module.exports = defineConfig({
         // Laravel's built-in health check, which answers once it is running.
         url: `http://127.0.0.1:${port}/up`,
         reuseExistingServer: false,
-        env: { STOCK_PANEL_DATA_DIR: dataDir },
+        // No Claude key, even if .env or Windows has one: the tests never
+        // contact Anthropic, and the page shows that no key is set up.
+        env: { STOCK_PANEL_DATA_DIR: dataDir, ANTHROPIC_API_KEY: '' },
         stdout: 'ignore',
-        stderr: 'pipe',
+        stderr: 'ignore',
     },
 });
