@@ -115,8 +115,13 @@ test.describe('logging in', () => {
 
         test('sends an open page to the login page', async ({ page, context }) => {
             await logIn(page);
+            // The page also loads the Claude conversation from the app's own
+            // server. If that answer arrives after the cookies are cleared, it
+            // logs the browser in again, so wait for it first.
+            const assistantLoaded = page.waitForResponse('**/assistant');
             await page.goto('/');
             await expect(row(page, 'MU').locator('.quote-price')).toHaveText('$1,088.00');
+            await assistantLoaded;
 
             // As if the login had expired. The next price refresh goes to the
             // app's own server (not the test's made-up prices), which refuses it.
