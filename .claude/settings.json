@@ -1,8 +1,20 @@
 {
   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PATH=\"/c/Program Files/nodejs:$PATH\" node \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-tests.js\"",
+            "timeout": 300,
+            "statusMessage": "Running the tests on the changed code..."
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
-        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
+        "matcher": "Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",

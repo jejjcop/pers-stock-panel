@@ -21,20 +21,29 @@ process.stdin.on('end', () => {
   ];
 
   const dangerousCommands = [
-    [/\bgit\s+push\b/, 'agents never push; the orchestrator does'],
-    [/\bgit\s+(reset\s+--hard|clean\s+-[a-z]*f|checkout\s+--\s|branch\s+-D)/, 'destructive git command'],
-    [/--no-verify\b/, 'skipping git hooks'],
+    [/\bgit\s+push\b/i, 'agents never push; the orchestrator does'],
+    [/\bgit\s+(reset\s+--hard|clean\s+-[a-z]*f|checkout\s+--\s|branch\s+-D)/i, 'destructive git command'],
+    [/--no-verify\b/i, 'skipping git hooks'],
     [/\brm\s+-[a-z]*r[a-z]*f?\s+(\/|~|\.\.)/i, 'recursive delete outside the project'],
-    [/\b(migrate:fresh|migrate:reset|db:wipe)\b/, 'wipes the database'],
-    [/\b(curl|wget)\b[^|]*\|\s*(sh|bash|php)\b/, 'piping a download into a shell'],
-    [/\bcat\b[^|;]*\.env\b(?!\.example)/, 'reading secrets'],
+    [/\bRemove-Item\b.*-Recurse/i, 'recursive delete'],
+    [/\b(migrate:fresh|migrate:reset|db:wipe)\b/i, 'wipes the database'],
+    [/\b(curl|wget|iwr|Invoke-WebRequest|irm|Invoke-RestMethod)\b[^|]*\|\s*(sh|bash|php|iex|Invoke-Expression)\b/i, 'piping a download into a shell'],
+    [/\b(cat|type|more|less|gc|Get-Content)\b[^|;]*\.env\b(?!\.example)/i, 'reading secrets'],
+    // Shell commands that write to the guardrails or CI (reading them is fine).
+    [
+      /(>|\b(Set-Content|Add-Content|Out-File|New-Item|Remove-Item|Copy-Item|Move-Item|Rename-Item|cp|mv|rm|del|tee|sed\s+-i|perl\s+-pi)\b)[^;&|]*(\.claude|\.github)[\\/]|(\.claude|\.github)[\\/][^;&|]*\b(Set-Content|Add-Content|Out-File)\b/i,
+      'modifies agent guardrails or CI',
+    ],
   ];
 
-  if (path && ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(tool)) {
+  const SHELL_TOOLS = ['Bash', 'PowerShell'];
+  const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'];
+
+  if (path && EDIT_TOOLS.includes(tool)) {
     const hit = protectedPaths.find(([re]) => re.test(path));
     if (hit) return block(`Blocked: ${path} is protected (${hit[1]}).`);
   }
-  if (tool === 'Bash') {
+  if (SHELL_TOOLS.includes(tool)) {
     const hit = dangerousCommands.find(([re]) => re.test(command));
     if (hit) return block(`Blocked: "${command.slice(0, 80)}" (${hit[1]}).`);
   }
