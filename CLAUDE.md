@@ -49,13 +49,14 @@ Before committing, run `/security-review` on the changes, fix what it finds (wit
 ## Deployment
 
 The user's everyday app on http://127.0.0.1:8080 is an installed copy in `%LOCALAPPDATA%\PersStockPanel\app`, kept up to date from GitHub by scheduled tasks (`deploy/`, see README). Changes in this folder reach it only after commit, push and passing tests on GitHub (within 15 minutes; `Start-ScheduledTask 'Pers Stock Panel - update'` to update at once). Never edit the installed copy directly, and use other ports (not 8080) for manual checks.
+Port 8095 is reserved for the browser tests, and 8100–8102 for the agent factory. Use e.g. 8090 for manual checks, and stop the server when done.
 
 ## Rules
 
 - Never read, write or delete `data/database.sqlite` (the user's real holdings and password hash), `data/portfolio.json` or `data/auth.json` (the same, as older versions saved them) in tests or experiments, and never run artisan commands against the real data folder. The browser tests log in with their own test password in their own data folder. The browser tests use `STOCK_PANEL_DATA_DIR`; for manual checks, run a copy of the app on another port with that variable set.
-- Commit and push to GitHub (`jejjcop/pers-stock-panel`, private) only when the user asks. End commit messages with the attribution line Claude Code provides.
+- Commit only when the user asks. Never push: the user pushes, or the agent factory's orchestrator does. End commit messages with the attribution line Claude Code provides.
 - Keep the page's text in English. Answer the user in the language they write in (usually Swedish).
-- The user is not a programmer: explain results and choices in plain words, and ask before installing software or changing Windows settings.
+- The user is an experienced developer (20+ years, strong in PHP). Be concise and technical.
 - Never change a migration that has already run (the real database has run them all); add a new migration instead.
 - Ask before adding a Composer or npm package, and name it in the summary of the work.
 - Tests never contact Yahoo or Anthropic; use the fakes above.

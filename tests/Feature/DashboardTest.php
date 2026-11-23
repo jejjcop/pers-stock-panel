@@ -51,4 +51,17 @@ class DashboardTest extends TestCase
         $this->assertTrue($pageData['isNew']);
         $this->assertSame(['AAPL', 'MSFT', 'NVDA', 'AMZN', 'META'], array_column($pageData['stocks'], 'ticker'));
     }
+
+    public function testHasAPlaceForTheWelcomeMessage(): void
+    {
+        // public/app.js fills in the greeting for the time of day.
+        $this->actingAs(User::factory()->create())->get('/')
+            ->assertOk()
+            ->assertSee('id="welcome-message"', false);
+    }
+
+    public function testTheLoginPageHasNoWelcomeMessage(): void
+    {
+        $this->get('/login')->assertOk()->assertDontSee('welcome-message', false);
+    }
 }

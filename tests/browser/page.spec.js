@@ -156,3 +156,53 @@ test.describe('the page', () => {
         await expect(page.locator('[data-section="monitor"] .table-wrap')).toBeHidden();
     });
 });
+
+test.describe('the welcome message', () => {
+    test.beforeEach(() => {
+        writePortfolio({ stocks: [{ ticker: 'MU', list: 'owned' }] });
+    });
+
+    // Times in Swedish winter time (+01:00); the browser runs in Europe/Stockholm.
+    const cases = [
+        ['04:59', 'Good evening'],
+        ['05:00', 'Good morning'],
+        ['11:59', 'Good morning'],
+        ['12:00', 'Good afternoon'],
+        ['16:59', 'Good afternoon'],
+        ['17:00', 'Good evening'],
+    ];
+    for (const [time, greeting] of cases) {
+        test(`says ${greeting} at ${time}`, async ({ page }) => {
+            await page.clock.setFixedTime(new Date(`2026-11-23T${time}:00+01:00`));
+            await page.goto('/');
+
+            await expect(page.locator('#welcome-message')).toHaveText(greeting);
+        });
+    }
+
+    test('changes by itself when the time of day changes', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-11-23T11:59:30+01:00') });
+        await page.goto('/');
+        await expect(page.locator('#welcome-message')).toHaveText('Good morning');
+
+        await page.clock.fastForward(60_000);
+
+        await expect(page.locator('#welcome-message')).toHaveText('Good afternoon');
+    });
+});
+
+test.describe('the welcome message in another time zone', () => {
+    test.use({ timezoneId: 'Asia/Tokyo' });
+
+    test.beforeEach(() => {
+        writePortfolio({ stocks: [{ ticker: 'MU', list: 'owned' }] });
+    });
+
+    test('follows the computer\'s own clock', async ({ page }) => {
+        // 15:00 in Tokyo, 07:00 in Stockholm.
+        await page.clock.setFixedTime(new Date('2026-11-23T06:00:00Z'));
+        await page.goto('/');
+
+        await expect(page.locator('#welcome-message')).toHaveText('Good afternoon');
+    });
+});

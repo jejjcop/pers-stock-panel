@@ -13,7 +13,7 @@
     <div class="page-shell">
         <header class="topbar">
             <div>
-                <p class="eyebrow">Market overview</p>
+                <p id="welcome-message" class="eyebrow">Welcome</p>
                 <h1>Pers Stock Panel</h1>
             </div>
             <div class="topbar-actions">
@@ -222,7 +222,7 @@
 
     <script id="portfolio-data" type="application/json">{!! json_encode($pageData, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) !!}</script>
     <script src="price-stream.js?v=1"></script>
-    <script src="app.js?v=38"></script>
+    <script src="app.js?v=39"></script>
     <script src="assistant.js?v=1"></script>
 </body>
 </html>

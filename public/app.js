@@ -5,6 +5,7 @@ const stockBodies = Array.from(document.querySelectorAll('tbody[data-list]'));
 const status = document.getElementById('watchlist-status');
 const refreshButton = document.getElementById('refresh-quotes');
 const refreshCountdown = document.getElementById('refresh-countdown');
+const welcomeMessage = document.getElementById('welcome-message');
 // Older versions kept everything in the browser under these keys. They are
 // only read once, to move that data into the database on this computer.
 const legacyStocksKey = 'stock-panel-added-tickers';
@@ -2059,6 +2060,27 @@ chartDialog.addEventListener('close', () => {
     chartDialogTooltip.hidden = true;
 });
 
+// The greeting for an hour of the day (0-23) on this computer's clock.
+function greetingFor(hour) {
+    if (hour >= 5 && hour < 12) {
+        return 'Good morning';
+    }
+    if (hour >= 12 && hour < 17) {
+        return 'Good afternoon';
+    }
+    return 'Good evening';
+}
+
+function updateGreeting() {
+    if (!welcomeMessage) {
+        return;
+    }
+    welcomeMessage.textContent = greetingFor(new Date().getHours());
+}
+
+updateGreeting();
+// Once a minute, so the greeting changes when the time of day does.
+window.setInterval(updateGreeting, 60_000);
 initializeStocks();
 if (typeof PriceStream !== 'undefined') {
     priceStream = PriceStream.create({ onPrice: applyStreamPrice, onStateChange: handleStreamStateChange });
