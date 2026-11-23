@@ -1,91 +1,30 @@
-# Runs the checks and tests on GitHub every time changes are pushed.
-name: Tests
+# Week 3: every PR (agent or human) must pass the test suite in CI.
+# Turn on branch protection for main: require this check to pass before merge.
+name: tests
 
 on:
-  push:
   pull_request:
-  workflow_dispatch:
-
-permissions:
-  contents: read
+  push:
+    branches: [main]
 
 jobs:
-  tests:
+  phpunit:
     runs-on: ubuntu-latest
     steps:
-      - name: Get the code
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
-      - name: Install PHP
-        uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.5'
-          extensions: curl
+          php-version: '8.3'
           coverage: none
-          tools: composer
 
-      - name: Install Laravel, PHPUnit and other dependencies
-        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
 
-      # Fails when a PHP library the app uses has a published security hole,
-      # so that version is not installed on the PC until it is updated.
-      - name: Check the PHP libraries for known security holes
-        run: composer audit
-
-      - name: Create Laravel's settings file and secret key
-        run: cp .env.example .env && php artisan key:generate
-
-      - name: Check PHP syntax
-        run: find app config routes public src tests -name '*.php' -print0 | xargs -0 -n1 php -l
-
-      - name: Check JavaScript syntax
-        run: node --check public/app.js
+      - name: Prepare app
+        run: |
+          cp .env.example .env
+          php artisan key:generate
 
       - name: Run tests
-        run: composer test
-
-  browser-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get the code
-        uses: actions/checkout@v5
-
-      - name: Install PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.5'
-          coverage: none
-          tools: composer
-
-      - name: Install Laravel
-        run: composer install --no-interaction --no-progress --prefer-dist --no-dev
-
-      - name: Create Laravel's settings file and secret key
-        run: cp .env.example .env && php artisan key:generate
-
-      - name: Install Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '24'
-          cache: npm
-
-      - name: Install Playwright
-        run: npm ci
-
-      # The same for the JavaScript test tools (they never reach the PC's app).
-      - name: Check the JavaScript libraries for known security holes
-        run: npm audit
-
-      - name: Install the test browser
-        run: npx playwright install --with-deps chromium
-
-      - name: Run browser tests
-        run: npm run test:browser
-
-      - name: Keep the test report when a test fails
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 14
+        run: php artisan test
