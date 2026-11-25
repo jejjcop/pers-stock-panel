@@ -13,5 +13,6 @@ Your job: write tests that check the acceptance criteria and the edge cases the 
 - Use the project's existing test style (Feature tests for HTTP, Unit tests for pure logic).
 - Run the suite. It is fine to finish with failing tests if they expose real bugs. Do not fake passing tests.
 - Do NOT commit, push, or touch .env, .github/ or .claude/.
+- If you start a server for a manual check, use a port from CLAUDE.md and stop it before you finish.
 
 Finish with a list of the tests you added and which ones fail, if any.

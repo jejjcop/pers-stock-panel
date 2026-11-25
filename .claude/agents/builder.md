@@ -13,5 +13,6 @@ Rules:
 - Secure by default (OWASP): validate input, use Eloquent/query bindings, never trust request data, escape output, no secrets in code.
 - Do NOT commit, push, create branches, or touch .env, .github/ or .claude/. The orchestrator handles git.
 - If you are given test failures or review feedback, fix the root cause. Do not weaken or delete a test to make it pass unless the test is genuinely wrong, and if so, say why in your final message.
+- If you start a server for a manual check, use a port from CLAUDE.md and stop it before you finish.
 
 Finish with a short summary: what you changed, which files, and anything the reviewer should look at closely.

@@ -14,5 +14,6 @@ How to plan:
 - Prefer 1–3 tasks. One task is fine for a small issue. Never invent work the issue didn't ask for.
 - In each task's instructions, name the files to change and the existing patterns to follow (e.g. "copy the validation style in StoreTransactionRequest").
 - List risks: data loss, auth, migrations, external APIs, money/price calculations.
+- Never change what the issue asks for. If you think the issue is wrong or unclear, say so under risks. Don't rewrite it.
 
 Return the plan in the required JSON format.
