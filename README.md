@@ -26,7 +26,7 @@ Requires PHP 8.3+ with the cURL extension enabled. Secure connections to Yahoo u
 
 ## Run locally
 
-The app is being moved to [Laravel](https://laravel.com) on the `laravel` branch. There, every address is a Laravel route in `routes/web.php`, answered by a controller in `app/Http/Controllers/`; the pages are Blade views in `resources/views/`. A middleware (`app/Http/Middleware/RequireLogin.php`) checks the login before every page and data address. The password and stocks are in a SQLite database, read and written through the Eloquent models in `app/Models/`; the tables are described by the migrations in `database/migrations/`. Prices come from Yahoo Finance through two services in `app/Services/`; the calculations on Yahoo's data are plain functions in `src/quote_functions.php`.
+The app is built with [Laravel](https://laravel.com). Every address is a Laravel route in `routes/web.php`, answered by a controller in `app/Http/Controllers/`; the pages are Blade views in `resources/views/`. A middleware (`app/Http/Middleware/RequireLogin.php`) checks the login before every page and data address. The password and stocks are in a SQLite database, read and written through the Eloquent models in `app/Models/`; the tables are described by the migrations in `database/migrations/`. Prices come from Yahoo Finance through two services in `app/Services/`; the calculations on Yahoo's data are plain functions in `src/quote_functions.php`.
 
 ```bash
 composer install
