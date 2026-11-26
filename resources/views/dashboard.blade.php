@@ -7,7 +7,7 @@
     <title>Pers Stock Panel</title>
     {{-- For public/app.js: the token Laravel checks on requests that save. --}}
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <link rel="stylesheet" href="styles.css?v=23">
+    <link rel="stylesheet" href="styles.css?v=24">
 </head>
 <body>
     <div class="page-shell">
