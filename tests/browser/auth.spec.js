@@ -22,6 +22,13 @@ test.describe('logging in', () => {
         await expect(page.locator('tbody[data-list]')).toHaveCount(0);
     });
 
+    test('has a white background', async ({ page }) => {
+        await page.goto('/login');
+
+        await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+        await expect(page.locator('body')).toHaveCSS('color', 'rgb(17, 24, 39)');
+    });
+
     test('refuses a wrong password', async ({ page }) => {
         await page.goto('/login');
 

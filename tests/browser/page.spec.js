@@ -1,6 +1,28 @@
 // @ts-check
 const { test, expect, writePortfolio, tickersIn, row, quotesResponse } = require('./helpers');
 
+// The contrast between two CSS colours like "rgb(17, 24, 39)", as WCAG
+// measures it: 1 (none) up to 21 (black on white). A see-through background
+// such as "rgba(220, 38, 38, 0.08)" is first blended onto white, the colour
+// of the panels and dialogs it sits on.
+function contrast(foreground, background = 'rgb(255, 255, 255)') {
+    const channels = (color) => {
+        const [r, g, b, alpha = 1] = color.match(/\d+(\.\d+)?/g).map(Number);
+        return [r, g, b].map((channel) => channel * alpha + 255 * (1 - alpha));
+    };
+    const luminance = (color) => {
+        const [r, g, b] = channels(color).map((channel) => {
+            const c = channel / 255;
+            return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const [lighter, darker] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
+const contrastWithWhite = (color) => contrast(color);
+
 test.describe('the page', () => {
     test.beforeEach(() => {
         writePortfolio({
@@ -33,6 +55,62 @@ test.describe('the page', () => {
 
         await expect(row(page, 'MU').locator('.quote-change')).toHaveClass(/\bup\b/);
         await expect(row(page, 'NVDA').locator('.quote-change')).toHaveClass(/\bdown\b/);
+        await expect(row(page, 'MU').locator('.quote-change')).toHaveCSS('color', 'rgb(4, 120, 87)');
+        await expect(row(page, 'NVDA').locator('.quote-change')).toHaveCSS('color', 'rgb(220, 38, 38)');
+        await expect(row(page, 'MU').locator('svg.sparkline.up path.sparkline-line')).toHaveCSS('stroke', 'rgb(4, 120, 87)');
+        await expect(row(page, 'NVDA').locator('svg.sparkline.down path.sparkline-line')).toHaveCSS('stroke', 'rgb(220, 38, 38)');
+    });
+
+    test('has a white background and dark text', async ({ page }) => {
+        await page.goto('/');
+
+        const body = page.locator('body');
+        await expect(body).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+        await expect(body).toHaveCSS('background-image', 'none');
+        await expect(body).toHaveCSS('color', 'rgb(17, 24, 39)');
+        await expect(page.locator('.panel').first()).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    });
+
+    test('keeps its text readable on the white background', async ({ page }) => {
+        await page.goto('/');
+        await expect(row(page, 'MU').locator('.quote-change')).toHaveClass(/\bup\b/);
+
+        const colorOf = (locator) => locator.evaluate((element) => getComputedStyle(element).color);
+        const colors = {
+            text: await colorOf(page.locator('body')),
+            muted: await colorOf(page.locator('.eyebrow').first()),
+            green: await colorOf(row(page, 'MU').locator('.quote-change')),
+            red: await colorOf(row(page, 'NVDA').locator('.quote-change')),
+            blue: await colorOf(page.locator('th.day-column').first()),
+        };
+
+        // WCAG asks for at least 4.5 to 1 for normal-sized text.
+        for (const [name, color] of Object.entries(colors)) {
+            expect(contrastWithWhite(color), `${name} (${color})`).toBeGreaterThanOrEqual(4.5);
+        }
+    });
+
+    test('keeps the Remove button readable on its red tint, also when pointed at', async ({ page }) => {
+        await page.goto('/');
+        await row(page, 'MU').getByRole('button', { name: 'Remove MU' }).click();
+        const remove = page.locator('#remove-dialog').getByRole('button', { name: 'Remove' });
+        await expect(remove).toBeVisible();
+
+        const colors = () => remove.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return { text: style.color, background: style.backgroundColor };
+        });
+
+        // Move the mouse away first: the dialog may open under it.
+        await page.mouse.move(0, 0);
+        const normal = await colors();
+        expect(contrast(normal.text, normal.background), `${normal.text} on ${normal.background}`).toBeGreaterThanOrEqual(4.5);
+
+        await remove.hover();
+        // The hover style may have a short transition, so wait until it is in place.
+        await expect.poll(async () => (await colors()).background).not.toBe(normal.background);
+        const hovered = await colors();
+        expect(contrast(hovered.text, hovered.background), `${hovered.text} on ${hovered.background}`).toBeGreaterThanOrEqual(4.5);
     });
 
     test('sorts each section by today\'s change, best first', async ({ page }) => {

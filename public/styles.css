@@ -1,16 +1,17 @@
 :root {
-    --bg: #0f172a;
-    --panel: #111827;
-    --panel-soft: #1f2937;
-    --line: rgba(148, 163, 184, 0.16);
-    --text: #e5f1ff;
-    --muted: #a7b1c2;
-    --blue: #60a5fa;
-    --green: #34d399;
-    --gold: #fbbf24;
-    --purple: #a78bfa;
-    --danger: #f87171;
-    --shadow: rgba(15, 23, 42, 0.28);
+    color-scheme: light;
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --panel-soft: #f1f5f9;
+    --line: rgba(15, 23, 42, 0.12);
+    --text: #111827;
+    --muted: #4b5563;
+    --blue: #2563eb;
+    --green: #047857;
+    --gold: #b45309;
+    --purple: #7c3aed;
+    --danger: #dc2626;
+    --shadow: rgba(15, 23, 42, 0.08);
 }
 
 * {
@@ -20,7 +21,7 @@
 body {
     margin: 0;
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(180deg, #0b1120 0%, #111827 100%);
+    background: var(--bg);
     color: var(--text);
 }
 
@@ -50,7 +51,7 @@ body {
     padding: 8px 14px;
     border: 1px solid var(--line);
     border-radius: 999px;
-    background: rgba(17, 24, 39, 0.9);
+    background: var(--panel);
 }
 
 .market-status[hidden] {
@@ -81,7 +82,7 @@ body {
 
 .market-status[data-session="open"] .market-status-dot {
     background: var(--green);
-    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2);
+    box-shadow: 0 0 0 3px rgba(4, 120, 87, 0.2);
 }
 
 .market-status[data-session="preMarket"] .market-status-dot,
@@ -109,11 +110,12 @@ h1 {
     border: 0;
     border-radius: 10px;
     padding: 11px 18px;
-    background: linear-gradient(135deg, var(--blue), #2563eb);
+    /* Dark enough at both ends for the white label (5.2:1 and 6.7:1). */
+    background: linear-gradient(135deg, var(--blue), #1d4ed8);
     color: white;
     cursor: pointer;
     font-weight: 600;
-    box-shadow: 0 10px 24px rgba(59, 130, 246, 0.35);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.2);
 }
 
 .dashboard {
@@ -128,7 +130,7 @@ h1 {
 }
 
 .stat-card {
-    background: rgba(17, 24, 39, 0.9);
+    background: var(--panel);
     border: 1px solid var(--line);
     box-shadow: 0 12px 30px var(--shadow);
     border-radius: 18px;
@@ -159,7 +161,7 @@ h1 {
 .accent-purple { border-top: 3px solid var(--purple); }
 
 .panel {
-    background: rgba(17, 24, 39, 0.9);
+    background: var(--panel);
     border: 1px solid var(--line);
     box-shadow: 0 12px 30px var(--shadow);
     border-radius: 18px;
@@ -192,7 +194,7 @@ h1 {
 .search-box input,
 .search-box select {
     border: 1px solid var(--line);
-    background: rgba(15, 23, 42, 0.9);
+    background: #ffffff;
     border-radius: 10px;
     padding: 10px 12px;
     color: var(--text);
@@ -311,7 +313,7 @@ th {
 
 th.day-column,
 td.day-cell {
-    background: rgba(96, 165, 250, 0.08);
+    background: rgba(37, 99, 235, 0.06);
 }
 
 th.day-column {
@@ -337,22 +339,22 @@ th.day-column {
 }
 
 .signal-badge.buy {
-    background: rgba(52, 211, 153, 0.15);
+    background: rgba(4, 120, 87, 0.1);
     color: var(--green);
 }
 
 .signal-badge.hold {
-    background: rgba(96, 165, 250, 0.15);
+    background: rgba(37, 99, 235, 0.1);
     color: var(--blue);
 }
 
 .signal-badge.watch {
-    background: rgba(251, 191, 36, 0.15);
+    background: rgba(180, 83, 9, 0.1);
     color: var(--gold);
 }
 
 .signal-badge.added {
-    background: rgba(148, 163, 184, 0.15);
+    background: rgba(75, 85, 99, 0.1);
     color: var(--muted);
 }
 
@@ -385,7 +387,7 @@ th.day-column {
 
 .stream-status[data-state="live"] .stream-status-dot {
     background: var(--green);
-    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.2);
+    box-shadow: 0 0 0 3px rgba(4, 120, 87, 0.2);
 }
 
 .stream-status[data-state="quiet"] .stream-status-dot,
@@ -406,14 +408,14 @@ th.day-column {
     animation: flash-down 1s ease-out;
 }
 
-/* The price turns white at the start so it stays readable on the colour. */
+/* A light tint of green or red, so the dark price stays readable on it. */
 @keyframes flash-up {
-    from { background: rgba(74, 222, 128, 0.7); color: #ffffff; }
+    from { background: rgba(4, 120, 87, 0.18); }
     to { background: transparent; }
 }
 
 @keyframes flash-down {
-    from { background: rgba(255, 82, 82, 0.7); color: #ffffff; }
+    from { background: rgba(220, 38, 38, 0.18); }
     to { background: transparent; }
 }
 
@@ -450,7 +452,7 @@ th.day-column {
 .holding-input {
     width: 78px;
     border: 1px solid var(--line);
-    background: rgba(15, 23, 42, 0.9);
+    background: #ffffff;
     border-radius: 8px;
     padding: 6px 8px;
     color: var(--text);
@@ -568,7 +570,7 @@ th.day-column {
 }
 
 .sparkline-button:hover {
-    background: rgba(148, 163, 184, 0.08);
+    background: rgba(15, 23, 42, 0.05);
 }
 
 .ticker-button {
@@ -612,11 +614,11 @@ th.day-column {
     border-radius: 16px;
     background: var(--panel);
     color: var(--text);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
 }
 
 .chart-dialog::backdrop {
-    background: rgba(2, 6, 23, 0.65);
+    background: rgba(15, 23, 42, 0.35);
 }
 
 .chart-dialog-header,
@@ -647,7 +649,7 @@ th.day-column {
     padding: 4px;
     border: 1px solid var(--line);
     border-radius: 10px;
-    background: rgba(15, 23, 42, 0.9);
+    background: #ffffff;
 }
 
 .range-buttons button {
@@ -824,9 +826,9 @@ th.day-column {
 
 .remove-stock-button {
     padding: 4px 9px;
-    border: 1px solid rgba(248, 113, 113, 0.35);
+    border: 1px solid rgba(220, 38, 38, 0.35);
     border-radius: 8px;
-    background: rgba(248, 113, 113, 0.1);
+    background: rgba(220, 38, 38, 0.06);
     color: var(--danger);
     cursor: pointer;
     font: inherit;
@@ -834,7 +836,7 @@ th.day-column {
 }
 
 .remove-stock-button:hover {
-    background: rgba(248, 113, 113, 0.2);
+    background: rgba(220, 38, 38, 0.12);
 }
 
 .topbar-actions form {
@@ -893,11 +895,11 @@ th.day-column {
     border-radius: 16px;
     background: var(--panel);
     color: var(--text);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
 }
 
 .confirm-dialog::backdrop {
-    background: rgba(2, 6, 23, 0.65);
+    background: rgba(15, 23, 42, 0.35);
 }
 
 .confirm-dialog h2 {
@@ -933,17 +935,21 @@ th.day-column {
 }
 
 .secondary-button:hover {
-    background: #273449;
+    background: #e2e8f0;
 }
 
+/* Red text needs a very pale tint to stay readable (4.5:1); on hover the
+   button turns solid red with white text instead. */
 .danger-button {
-    border: 1px solid rgba(248, 113, 113, 0.5);
-    background: rgba(248, 113, 113, 0.18);
+    border: 1px solid rgba(220, 38, 38, 0.45);
+    background: rgba(220, 38, 38, 0.03);
     color: var(--danger);
 }
 
 .danger-button:hover {
-    background: rgba(248, 113, 113, 0.3);
+    border-color: var(--danger);
+    background: var(--danger);
+    color: #ffffff;
 }
 
 @media (max-width: 640px) {
@@ -1009,7 +1015,7 @@ th.day-column {
     padding: 16px 16px 10px;
     border: 1px solid var(--line);
     border-radius: 16px;
-    background: rgba(15, 23, 42, 0.55);
+    background: #ffffff;
 }
 
 .live-chart-header {
@@ -1187,8 +1193,8 @@ th.day-column {
 
 .assistant-message.is-user {
     align-self: flex-end;
-    background: rgba(96, 165, 250, 0.14);
-    border-color: rgba(96, 165, 250, 0.35);
+    background: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.3);
 }
 
 .assistant-message-label {
@@ -1226,7 +1232,7 @@ th.day-column {
     min-height: 46px;
     resize: vertical;
     border: 1px solid var(--line);
-    background: rgba(15, 23, 42, 0.9);
+    background: #ffffff;
     border-radius: 10px;
     padding: 10px 12px;
     color: var(--text);

@@ -35,6 +35,20 @@ test.describe('live prices from the stream', () => {
         const mu = row(page, 'MU');
         await expect(mu.locator('.quote-price')).toHaveText('$1,100.50');
         await expect(mu.locator('.quote-price')).toHaveClass(/\bflash-up\b/);
+        // The flash only tints the background; the text keeps its colour (it
+        // used to turn white). Compare the first, strongest frame with the end.
+        const flashColors = await mu.locator('.quote-price').evaluate((element) => {
+            const animations = element.getAnimations();
+            animations.forEach((animation) => {
+                animation.pause();
+                animation.currentTime = 0;
+            });
+            const start = getComputedStyle(element).color;
+            animations.forEach((animation) => animation.finish());
+            return { animations: animations.length, start, end: getComputedStyle(element).color };
+        });
+        expect(flashColors.animations).toBeGreaterThan(0);
+        expect(flashColors.start).toBe(flashColors.end);
         // (1,100.50 - 1,045.56) / 1,045.56 = +5.25%
         await expect(mu.locator('.quote-change')).toHaveText('+5.25%');
         await expect(mu.locator('.holding-value')).toHaveText('$20,909.50');
